@@ -18,9 +18,15 @@ In **Supabase → Authentication → URL Configuration**, use `https://trikonici
 - `https://trikonic-e-commerce-website.vercel.app`
 - `http://localhost:8000` for local preview
 
-Email confirmation is expected for new accounts. The branded confirmation page is `confirm.html`. The matching email HTML is in `email-templates/confirm-signup.html`; the current Supabase dashboard says custom email templates require custom SMTP or a Pro upgrade. Once custom SMTP is configured, open **Supabase → Authentication → Email Templates → Confirm signup**, set the subject to `Confirm your Trikonic Imports account`, and paste that HTML. Its button opens the branded page on the Site URL domain, where the one-time token is verified and the customer is signed into their account.
+Email confirmation is expected for new accounts. The branded confirmation page is `confirm.html`. The matching email HTML is in `email-templates/confirm-signup.html`. To send those account emails through Resend:
 
-The confirmation page and logo are already branded in the website code. When custom SMTP is set up, use an address on your verified business domain for the sender. Supabase's default email sender is rate-limited and its template editor is currently disabled for this project until SMTP is configured or the project plan is upgraded.
+1. In Resend, add and verify a sending domain you control. Add the DNS records Resend provides, and use one of its verified addresses as the sender (for example, `accounts@trikonicimports.com`, if that address/domain is verified).
+2. Create a Resend API key in the Resend dashboard. Keep it private; do not put it in this repository, `config.js`, or a customer-facing Vercel environment variable.
+3. In **Supabase → Authentication → Emails → SMTP Settings**, enable custom SMTP and enter: Host `smtp.resend.com`, Port `465`, Username `resend`, Password your Resend API key, Sender email the verified address, and Sender name `Trikonic Imports`. Save the settings. Supabase documents Resend as a supported SMTP provider; Resend's SMTP password is an API key.
+4. Go to **Supabase → Authentication → Email Templates → Confirm signup**, set the subject to `Confirm your Trikonic Imports account`, and paste the HTML from `email-templates/confirm-signup.html`. Its button opens the branded page on the Site URL domain, where the one-time token is verified and the customer is signed into their account.
+5. Sign up with an email address you can check and confirm that the email arrives and the link returns to the site.
+
+The confirmation page and logo are already branded in the website code. Until custom SMTP is enabled, Supabase's built-in sender is for limited testing and may not send to arbitrary customer addresses. Never share your Resend API key in chat or commit it to GitHub.
 
 The bag is saved in the browser's local storage, so it survives closing and reopening the site on that same browser/device. A customer must sign in to submit an order request. New requests are stored in Supabase for the customer's order history and also sent to the existing Google Sheet for the team.
 
