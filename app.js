@@ -1,5 +1,5 @@
 (() => {
-  const products = window.PRODUCTS || [];
+  let products = window.PRODUCTS || [];
   const money = n => `GH₵${Number(n).toFixed(2)}`;
   const cart = new Map();
   let category = "All finds";
@@ -13,6 +13,22 @@
   function renderCategories() {
     const cats = ["All finds", ...new Set(products.map(p => p.category))];
     $("#categories").innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
+  }
+  function loadProductsFromSheet() {
+    const endpoint = window.TRikonicOrderEndpoint || "";
+    if (!endpoint) return;
+    window.receiveTrikonicProducts = catalog => {
+      if (!catalog?.ready || !Array.isArray(catalog.products)) return;
+      products = catalog.products;
+      renderCategories(); renderProducts(); renderCart();
+    };
+    const script = document.createElement("script");
+    const url = new URL(endpoint);
+    url.searchParams.set("callback", "receiveTrikonicProducts");
+    url.searchParams.set("t", String(Date.now()));
+    script.src = url.toString();
+    script.onerror = () => console.warn("Could not load the storefront catalog from Google Sheets.");
+    document.head.appendChild(script);
   }
   function renderCart() {
     const entries = [...cart.entries()].filter(([, qty]) => qty > 0);
@@ -65,5 +81,5 @@
     } catch (err) { status.textContent = "We couldn’t send that just now. Please try again or email us directly."; }
     finally { submit.disabled = false; submit.innerHTML = 'Send my request <span>↗</span>'; }
   });
-  renderCategories(); renderProducts(); renderCart();
+  renderCategories(); renderProducts(); renderCart(); loadProductsFromSheet();
 })();
