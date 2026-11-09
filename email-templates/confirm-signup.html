@@ -1,0 +1,27 @@
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f3ef;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;color:#21221e">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#fffefa;border:1px solid #e5e3dd">
+      <tr><td style="padding:28px 34px 22px;border-bottom:1px solid #e5e3dd">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td align="center" valign="middle" width="38" height="38" style="width:38px;height:38px;border-radius:50%;background:#c6d3b2;color:#21221e;font-family:Georgia,serif;font-size:23px;font-weight:bold">T</td>
+          <td style="padding-left:11px;font-size:18px;font-weight:bold;letter-spacing:-.5px">trikonic <span style="font-size:13px;font-weight:normal;color:#87877e">imports</span></td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:35px 34px 20px">
+        <p style="margin:0 0 12px;font-size:10px;line-height:1.5;font-weight:bold;letter-spacing:2px;color:#77786f">YOUR TRIKONIC ACCOUNT</p>
+        <h1 style="margin:0 0 17px;font-family:Georgia,'Times New Roman',serif;font-size:30px;line-height:1.15;font-weight:normal;color:#21221e">Confirm your email.</h1>
+        <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#606159">Thanks for creating an account with Trikonic Imports. Confirm this email address to activate your account and keep track of your order requests.</p>
+        <p style="margin:0 0 23px;font-size:13px;line-height:1.6;color:#77786f">Account email: <strong style="color:#21221e">{{ .Email }}</strong></p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#21221e" style="padding:14px 20px">
+          <a href="{{ .SiteURL }}/confirm.html?token_hash={{ .TokenHash }}&amp;type=email" style="color:#fffefa;text-decoration:none;font-size:13px;font-weight:bold">Confirm my email&nbsp;&nbsp; ↗</a>
+        </td></tr></table>
+        <p style="margin:22px 0 0;font-size:11px;line-height:1.7;color:#77786f">If the button doesn’t open, copy this address into your browser:<br><a href="{{ .SiteURL }}/confirm.html?token_hash={{ .TokenHash }}&amp;type=email" style="color:#526044;word-break:break-all">{{ .SiteURL }}/confirm.html?token_hash={{ .TokenHash }}&amp;type=email</a></p>
+      </td></tr>
+      <tr><td style="padding:19px 34px 26px;border-top:1px solid #e5e3dd">
+        <p style="margin:0 0 8px;font-size:11px;line-height:1.65;color:#606159">This link is only for confirming your Trikonic account. We’ll never ask you to email us your password or payment details.</p>
+        <p style="margin:0;font-size:11px;line-height:1.65;color:#87877e">If you didn’t create an account, you can ignore this email. The account won’t be activated.</p>
+      </td></tr>
+    </table>
+    <p style="margin:17px 0 0;font-size:10px;line-height:1.6;color:#87877e">Trikonic Imports · Good things, gathered with care.</p>
+  </td></tr>
+</table>

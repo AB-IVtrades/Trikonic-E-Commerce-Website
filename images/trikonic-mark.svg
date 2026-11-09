@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Trikonic Imports mark</title>
+  <circle cx="24" cy="24" r="23" fill="#c6d3b2"/>
+  <path d="M12.5 15.5h23M24 15.5v19.2c0 2.4-1.9 4.3-4.3 4.3h-.8" fill="none" stroke="#21221e" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.2"/>
+  <path d="m15.8 29.4 7.9 6.8 10.7-10.7" fill="none" stroke="#21221e" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.2"/>
+  <circle cx="35.5" cy="14.5" r="4.2" fill="#ef7453" stroke="#f4f3ef" stroke-width="1.5"/>
+</svg>

@@ -12,12 +12,15 @@ The storefront uses the Supabase project **Trikonic E-Commerce Website**. `confi
 
 The `public.orders` table is defined in `supabase/schema.sql` and is already installed in the connected Supabase project. To set it up in another project, run that SQL in **Supabase → SQL Editor**. Row Level Security lets authenticated customers insert orders and read only orders linked to their own account. Customers cannot update order status or read another customer's data.
 
-In **Supabase → Authentication → URL Configuration**, set the Site URL to `https://trikonic-e-commerce-website.vercel.app` and add these Redirect URLs:
+In **Supabase → Authentication → URL Configuration**, use `https://trikonicimports.com` as the Site URL and allow the live site and local preview:
 
-- `https://trikonic-e-commerce-website.vercel.app/**`
-- `http://localhost:8000/**` for local preview
+- `https://trikonicimports.com`
+- `https://trikonic-e-commerce-website.vercel.app`
+- `http://localhost:8000` for local preview
 
-Add the custom domain to the Redirect URLs after it is connected. Email confirmation is expected for new accounts. Supabase's default email sender is suitable for initial setup but is rate-limited; configure a production SMTP provider before a wider public launch.
+Email confirmation is expected for new accounts. The branded confirmation page is `confirm.html`. The matching email HTML is in `email-templates/confirm-signup.html`; the current Supabase dashboard says custom email templates require custom SMTP or a Pro upgrade. Once custom SMTP is configured, open **Supabase → Authentication → Email Templates → Confirm signup**, set the subject to `Confirm your Trikonic Imports account`, and paste that HTML. Its button opens the branded page on the Site URL domain, where the one-time token is verified and the customer is signed into their account.
+
+The confirmation page and logo are already branded in the website code. When custom SMTP is set up, use an address on your verified business domain for the sender. Supabase's default email sender is rate-limited and its template editor is currently disabled for this project until SMTP is configured or the project plan is upgraded.
 
 The bag is saved in the browser's local storage, so it survives closing and reopening the site on that same browser/device. A customer must sign in to submit an order request. New requests are stored in Supabase for the customer's order history and also sent to the existing Google Sheet for the team.
 
@@ -41,7 +44,7 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-The site does not take payment. Customers sign in and submit an order request; the request is saved to their Supabase order history and sent to `Trikonic Orders` in Google Sheets. Your team then confirms availability, delivery, and payment with them. After an order is saved, the customer can download a PDF order-request receipt. It is not proof of payment; shipping is paid separately by the customer and is excluded from the item subtotal.
+The site does not take payment. Customers must sign in or create and confirm an account before the checkout form opens or an order can be submitted. Supabase Row Level Security also rejects anonymous order inserts. Each request is saved to the customer's Supabase order history and sent to `Trikonic Orders` in Google Sheets. Your team then confirms availability, delivery, and payment with them. After an order is saved, the customer can download a PDF order-request receipt. It is not proof of payment; shipping is paid separately by the customer and is excluded from the item subtotal.
 
 To connect the order form and product catalog to the existing Sheet:
 

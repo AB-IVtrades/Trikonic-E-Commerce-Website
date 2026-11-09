@@ -9,6 +9,7 @@
     ? window.supabase.createClient(supabaseConfig.url, supabaseConfig.publishableKey)
     : null;
   let signedInUser = null;
+  let resumeCheckoutAfterAuth = false;
   let cart = new Map();
   try {
     const storedCart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
@@ -170,7 +171,17 @@
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
   });
   $("#cart-open").addEventListener("click", () => setDrawer(true)); $("#cart-close").addEventListener("click", () => setDrawer(false)); $("#overlay").addEventListener("click", () => setDrawer(false)); $("#continue-shopping").addEventListener("click", () => setDrawer(false));
-  $("#checkout-open").addEventListener("click", () => { setDrawer(false); $("#checkout-form-view").hidden = false; $("#checkout-success-view").hidden = true; $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); renderCheckoutReceipt(); });
+  function openCheckout() { $("#checkout-form-view").hidden = false; $("#checkout-success-view").hidden = true; $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); renderCheckoutReceipt(); }
+  $("#checkout-open").addEventListener("click", () => {
+    setDrawer(false);
+    if (!signedInUser) {
+      resumeCheckoutAfterAuth = true;
+      openAccount();
+      $("#account-status").textContent = "Sign in or create an account to continue with your order request.";
+      return;
+    }
+    openCheckout();
+  });
   const closeModal = () => { $("#modal-backdrop").classList.remove("show"); document.body.classList.remove("no-scroll"); };
   $("#checkout-close").addEventListener("click", closeModal); $("#modal-backdrop").addEventListener("click", e => { if (e.target.id === "modal-backdrop") closeModal(); });
   $("#receipt-download").addEventListener("click", () => { if (savedReceiptOrder) downloadReceiptPdf(savedReceiptOrder); });
@@ -179,6 +190,7 @@
   function openAccount() { accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
   function renderAccountState() {
     $("#account-open").textContent = signedInUser ? "My account" : "Sign in";
+    $("#checkout-open").innerHTML = signedInUser ? 'Review your request <span>↗</span>' : 'Sign in to continue <span>↗</span>';
     $("#account-auth-view").hidden = Boolean(signedInUser);
     $("#account-dashboard").hidden = !signedInUser;
     if (signedInUser) $("#account-email").textContent = signedInUser.email || "Signed in";
@@ -228,7 +240,7 @@
         const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: fullName }, emailRedirectTo: window.location.origin } });
         if (error) throw error;
         if (data.session) { status.textContent = "Account created. You’re signed in."; }
-        else { status.textContent = "Check your email for a confirmation link, then come back here to sign in."; }
+        else { status.textContent = "We sent a confirmation link for your Trikonic Imports account. Check your inbox and spam folder to activate it."; }
       } else {
         const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -252,6 +264,11 @@
       signedInUser = session?.user || null;
       renderAccountState();
       if (signedInUser) setTimeout(loadOrderHistory, 0);
+      if (signedInUser && resumeCheckoutAfterAuth) {
+        resumeCheckoutAfterAuth = false;
+        closeAccount();
+        openCheckout();
+      }
     });
   }
   renderAccountState(); setAuthMode("signin");
