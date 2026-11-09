@@ -40,18 +40,28 @@ function doGet(e) {
           }
         });
       }
-      const rows = catalogSheet.getRange(2, 1, catalogSheet.getLastRow() - 1, 7).getValues();
+      const catalogHeaders = catalogSheet.getRange(1, 1, 1, catalogSheet.getLastColumn()).getValues()[0].map(value => String(value).trim().toLowerCase());
+      const column = name => catalogHeaders.indexOf(name.toLowerCase());
+      const rows = catalogSheet.getRange(2, 1, catalogSheet.getLastRow() - 1, catalogSheet.getLastColumn()).getValues();
       rows.forEach(row => {
-        const [sku, description, image, rawAvailability, tag, color, visible] = row;
+        const value = name => column(name) < 0 ? "" : row[column(name)];
+        const sku = value("SKU"), description = value("Description"), image = value("Photo URL");
+        const rawAvailability = value("Availability"), tag = value("Tag"), color = value("Card Color"), visible = value("Show on website");
         const isVisible = visible === true || ["true", "yes", "1"].includes(String(visible).trim().toLowerCase());
         const product = inventory.get(String(sku || "").trim());
         if (!isVisible || !product || !image) return;
         const availabilityValue = String(rawAvailability || "in_stock").trim().toLowerCase().replace(/[\s_-]/g, "");
-        const availability = availabilityValue === "preorder" ? "preorder" : "in_stock";
+        const availability = availabilityValue === "preorder" ? "preorder" : availabilityValue === "outofstock" ? "out_of_stock" : "in_stock";
+        const flashValue = value("Flash Sale");
+        const flashSaleRequested = flashValue === true || ["true", "yes", "1", "active"].includes(String(flashValue).trim().toLowerCase());
+        const rawSalePrice = value("Sale Price (GHS)");
+        const salePrice = typeof rawSalePrice === "number" ? rawSalePrice : Number(String(rawSalePrice || "").replace(/[^0-9.-]/g, ""));
+        const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
         const safeColor = /^#[0-9a-f]{6}$/i.test(String(color).trim()) ? String(color).trim() : "#e8e4dc";
         products.push({
           id: String(sku).trim(), name: product.name, category: product.category,
-          price: product.price, description: String(description || "").trim(), image: String(image).trim(), availability,
+          price: flashSale ? salePrice : product.price, originalPrice: product.price, flashSale,
+          description: String(description || "").trim(), image: String(image).trim(), availability,
           tag: String(tag || "").trim(), color: safeColor
         });
       });
@@ -70,7 +80,7 @@ function doPost(e) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME)
       || SpreadsheetApp.getActiveSpreadsheet().insertSheet(SHEET_NAME);
     ensureOrderHeaders(sheet);
-    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.availability === "preorder" ? " [PRE-ORDER]" : " [IN STOCK]"} @ GHS ${item.unitPrice}`).join("; ");
+    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
     const receivedAt = new Date();
     sheet.appendRow([
       receivedAt, receivedAt, order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
@@ -83,6 +93,42 @@ function doPost(e) {
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(error) })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// Run once to add flash-sale columns and refresh catalog dropdowns.
+function setupTrikonicCatalogSheet() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(CATALOG_SHEET_NAME) || spreadsheet.insertSheet(CATALOG_SHEET_NAME);
+  ensureCatalogHeaders(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(value => String(value).trim().toLowerCase());
+  const availabilityColumn = headers.indexOf("availability") + 1;
+  const flashColumn = headers.indexOf("flash sale") + 1;
+  const salePriceColumn = headers.indexOf("sale price (ghs)") + 1;
+  const rows = Math.max(sheet.getMaxRows() - 1, 1);
+  sheet.getRange(2, availabilityColumn, rows, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(["In Stock", "Pre-Order", "Out of Stock"], true).setAllowInvalid(false).build()
+  );
+  sheet.getRange(2, flashColumn, rows, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(["TRUE", "FALSE"], true).setAllowInvalid(false).build()
+  );
+  sheet.getRange(2, salePriceColumn, rows, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireNumberGreaterThan(0).setAllowInvalid(false).build()
+  );
+  sheet.setFrozenRows(1);
+}
+
+function ensureCatalogHeaders(sheet) {
+  const defaultHeaders = ["SKU", "Description", "Photo URL", "Availability", "Tag", "Card Color", "Show on website"];
+  if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
+  const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
+  const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
+  ["Flash Sale", "Sale Price (GHS)"].forEach(header => {
+    if (!current.includes(header.toLowerCase())) {
+      const nextColumn = sheet.getLastColumn() + 1;
+      sheet.getRange(1, nextColumn).setValue(header);
+      current.push(header.toLowerCase());
+    }
+  });
 }
 
 // Run once from the Apps Script editor to add/backfill the date and time columns now.
