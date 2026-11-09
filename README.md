@@ -6,6 +6,21 @@ A small static storefront, ready to push to a Git repository and deploy on Verce
 
 Open `index.html` in a browser, or run a local static server from this folder (for example `python3 -m http.server 8000`) and visit `http://localhost:8000`.
 
+## Customer accounts, saved carts, and order history
+
+The storefront uses the Supabase project **Trikonic E-Commerce Website**. `config.js` contains its project URL and public publishable key; a publishable key is meant for browser code. Never put a Supabase secret or service-role key in this repository.
+
+The `public.orders` table is defined in `supabase/schema.sql` and is already installed in the connected Supabase project. To set it up in another project, run that SQL in **Supabase → SQL Editor**. Row Level Security lets authenticated customers insert orders and read only orders linked to their own account. Customers cannot update order status or read another customer's data.
+
+In **Supabase → Authentication → URL Configuration**, set the Site URL to `https://trikonic-e-commerce-website.vercel.app` and add these Redirect URLs:
+
+- `https://trikonic-e-commerce-website.vercel.app/**`
+- `http://localhost:8000/**` for local preview
+
+Add the custom domain to the Redirect URLs after it is connected. Email confirmation is expected for new accounts. Supabase's default email sender is suitable for initial setup but is rate-limited; configure a production SMTP provider before a wider public launch.
+
+The bag is saved in the browser's local storage, so it survives closing and reopening the site on that same browser/device. A customer must sign in to submit an order request. New requests are stored in Supabase for the customer's order history and also sent to the existing Google Sheet for the team.
+
 ## Manage products in Google Sheets
 
 The website reads its public catalog from the `Website Catalog` tab in the Trikonic spreadsheet. The existing `Products` tab contains inventory and formula-driven business data, so leave that tab as it is and edit `Website Catalog` for website listings.
@@ -26,14 +41,14 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-The site does not take payment. Customers submit a request; your team confirms availability, delivery, and payment with them. Until you connect Sheets, the form opens a prefilled email to `hello@trikonic.com` (replace this address with one your team checks).
+The site does not take payment. Customers sign in and submit an order request; the request is saved to their Supabase order history and sent to `Trikonic Orders` in Google Sheets. Your team then confirms availability, delivery, and payment with them.
 
 To connect the order form and product catalog to the existing Sheet:
 
 1. In the Trikonic spreadsheet choose **Extensions → Apps Script**.
 2. Replace the editor contents with `google-apps-script.gs` from this project and save. It reads the `Website Catalog` tab and writes new orders to `Trikonic Orders`.
 3. In Apps Script choose **Deploy → Manage deployments**, edit the Web App deployment, select **New version**, and deploy. Keep **Execute as** set to your account and **Who has access** set to **Anyone**. The Web App URL should remain the same, so `config.js` does not need a change.
-4. Refresh the website and confirm a row marked `TRUE` appears. For order setup, submit one clearly marked test order and check `Trikonic Orders`; remove the test row afterwards.
+4. Refresh the website. For order setup, submit one clearly marked test order and check `Trikonic Orders` and **My account → Order history**; remove any test records afterwards.
 
 The Web App must accept requests from website visitors, so its URL is public. Keep only order fields in this spreadsheet, restrict spreadsheet access to your team, and redeploy the Apps Script deployment after changing its code. The website queues each request with a browser POST. Google Apps Script redirects its response, so the browser cannot verify the Sheet write; the customer sees an “on its way” message after the browser queues it. Check the Sheet when you first set this up.
 

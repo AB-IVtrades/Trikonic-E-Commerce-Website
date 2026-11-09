@@ -1,10 +1,21 @@
 (() => {
   let products = window.PRODUCTS || [];
   const money = n => `GH₵${Number(n).toFixed(2)}`;
-  const cart = new Map();
+  const CART_KEY = "trikonic-cart-v1";
+  const supabaseConfig = window.TRikonicSupabaseConfig || {};
+  const supabaseClient = window.supabase?.createClient && supabaseConfig.url && supabaseConfig.publishableKey
+    ? window.supabase.createClient(supabaseConfig.url, supabaseConfig.publishableKey)
+    : null;
+  let signedInUser = null;
+  let cart = new Map();
+  try {
+    const storedCart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
+    if (Array.isArray(storedCart)) cart = new Map(storedCart.filter(row => Array.isArray(row) && row.length === 2 && Number(row[1]) > 0).map(([id, quantity]) => [String(id), Number(quantity)]));
+  } catch (_) { cart = new Map(); }
   let category = "All finds";
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
+  function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify([...cart])); } catch (_) {} }
 
   function renderProducts() {
     const shown = category === "All finds" ? products : products.filter(p => p.category === category);
@@ -31,7 +42,7 @@
     document.head.appendChild(script);
   }
   function renderCart() {
-    const entries = [...cart.entries()].filter(([, qty]) => qty > 0);
+    const entries = [...cart.entries()].filter(([id, qty]) => qty > 0 && products.some(p => p.id === id));
     const count = entries.reduce((s, [, q]) => s + q, 0);
     const total = entries.reduce((s, [id, q]) => s + (products.find(p => p.id === id)?.price || 0) * q, 0);
     $("#cart-count").textContent = count; $("#drawer-count").textContent = `(${count})`;
@@ -43,42 +54,133 @@
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
   document.addEventListener("click", e => {
-    const add = e.target.closest("[data-add]"); if (add) { cart.set(add.dataset.add, (cart.get(add.dataset.add) || 0) + 1); renderCart(); add.classList.add("added"); add.textContent = "✓"; setTimeout(() => { add.classList.remove("added"); add.textContent = "+"; }, 800); }
+    const add = e.target.closest("[data-add]"); if (add) { cart.set(add.dataset.add, (cart.get(add.dataset.add) || 0) + 1); saveCart(); renderCart(); add.classList.add("added"); add.textContent = "✓"; setTimeout(() => { add.classList.remove("added"); add.textContent = "+"; }, 800); }
     const filter = e.target.closest("[data-category]"); if (filter) { category = filter.dataset.category; renderCategories(); renderProducts(); }
-    const qty = e.target.closest("[data-qty]"); if (qty) { cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); renderCart(); }
-    const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); renderCart(); }
+    const qty = e.target.closest("[data-qty]"); if (qty) { cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
+    const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
   });
   $("#cart-open").addEventListener("click", () => setDrawer(true)); $("#cart-close").addEventListener("click", () => setDrawer(false)); $("#overlay").addEventListener("click", () => setDrawer(false)); $("#continue-shopping").addEventListener("click", () => setDrawer(false));
   $("#checkout-open").addEventListener("click", () => { setDrawer(false); $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); });
   const closeModal = () => { $("#modal-backdrop").classList.remove("show"); document.body.classList.remove("no-scroll"); };
   $("#checkout-close").addEventListener("click", closeModal); $("#modal-backdrop").addEventListener("click", e => { if (e.target.id === "modal-backdrop") closeModal(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); } });
+  const accountBackdrop = $("#account-backdrop");
+  const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
+  function openAccount() { accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
+  function renderAccountState() {
+    $("#account-open").textContent = signedInUser ? "My account" : "Sign in";
+    $("#account-auth-view").hidden = Boolean(signedInUser);
+    $("#account-dashboard").hidden = !signedInUser;
+    if (signedInUser) $("#account-email").textContent = signedInUser.email || "Signed in";
+  }
+  async function loadOrderHistory() {
+    const history = $("#order-history");
+    const status = $("#orders-status");
+    if (!signedInUser || !supabaseClient) return;
+    status.textContent = "Loading your orders…";
+    const { data, error } = await supabaseClient.from("orders").select("order_number,items,estimated_total,currency,status,created_at").order("created_at", { ascending: false }).limit(25);
+    if (error) { status.textContent = "We couldn’t load your order history. Please try again."; return; }
+    status.textContent = "";
+    if (!data.length) { history.innerHTML = '<p class="account-empty">No order requests yet. Your requests will appear here.</p>'; return; }
+    history.innerHTML = data.map(order => {
+      const date = new Date(order.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      const items = (Array.isArray(order.items) ? order.items : []).map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}`).join(" · ");
+      return `<article class="order-card"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(order.status || "New")}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${items}</p></article>`;
+    }).join("");
+  }
+  function setAuthMode(mode) {
+    const signup = mode === "signup";
+    $("#account-name-field").hidden = !signup;
+    $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : "Welcome to <em>Trikonic.</em>";
+    $("#account-intro").textContent = signup ? "Save your bag on this device and see your order requests in one place." : "Sign in to place order requests and keep track of them here.";
+    $("#account-submit").innerHTML = signup ? "Create account <span>↗</span>" : "Sign in <span>↗</span>";
+    $("#account-switch-copy").innerHTML = signup ? 'Already have an account? <button type="button" id="account-switch">Sign in</button>' : 'New here? <button type="button" id="account-switch">Create an account</button>';
+    $("#account-form").dataset.mode = mode;
+    $("#account-status").textContent = "";
+  }
+  $("#account-open").addEventListener("click", openAccount);
+  $("#account-close").addEventListener("click", closeAccount);
+  accountBackdrop.addEventListener("click", e => { if (e.target === accountBackdrop) closeAccount(); });
+  $("#account-switch-copy").addEventListener("click", e => { if (e.target.id === "account-switch") setAuthMode($("#account-form").dataset.mode === "signup" ? "signin" : "signup"); });
+  $("#account-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const status = $("#account-status");
+    const submit = $("#account-submit");
+    if (!supabaseClient) { status.textContent = "Account access isn’t configured yet. Please contact us."; status.classList.add("account-error"); return; }
+    status.classList.remove("account-error");
+    submit.disabled = true;
+    const fields = new FormData(e.currentTarget);
+    const email = String(fields.get("email") || "").trim();
+    const password = String(fields.get("password") || "");
+    try {
+      if (e.currentTarget.dataset.mode === "signup") {
+        const fullName = String(fields.get("fullName") || "").trim();
+        const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: fullName }, emailRedirectTo: window.location.origin } });
+        if (error) throw error;
+        if (data.session) { status.textContent = "Account created. You’re signed in."; }
+        else { status.textContent = "Check your email for a confirmation link, then come back here to sign in."; }
+      } else {
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        status.textContent = "Signed in.";
+        renderAccountState();
+        setTimeout(loadOrderHistory, 0);
+      }
+    } catch (error) {
+      status.textContent = error.message || "We couldn’t complete that. Please check your details and try again.";
+      status.classList.add("account-error");
+    } finally { submit.disabled = false; }
+  });
+  $("#account-signout").addEventListener("click", async () => {
+    if (!supabaseClient) return;
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) $("#orders-status").textContent = "Could not sign out. Please try again.";
+    else { signedInUser = null; renderAccountState(); setAuthMode("signin"); }
+  });
+  if (supabaseClient) {
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+      signedInUser = session?.user || null;
+      renderAccountState();
+      if (signedInUser) setTimeout(loadOrderHistory, 0);
+    });
+  }
+  renderAccountState(); setAuthMode("signin");
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); } });
   $("#year").textContent = new Date().getFullYear();
 
   $("#order-form").addEventListener("submit", async e => {
     e.preventDefault();
     const status = $("#form-status"); const submit = $(".submit-order");
+    if (!signedInUser) { closeModal(); openAccount(); $("#account-status").textContent = "Sign in or create an account first so you can track this order."; return; }
+    if (!supabaseClient) { status.textContent = "Order tracking is temporarily unavailable. Please try again later."; return; }
     const form = new FormData(e.currentTarget);
     const items = [...cart.entries()].filter(([, q]) => q > 0).map(([id, quantity]) => { const p = products.find(x => x.id === id); return { id, name: p.name, availability: p.availability === "preorder" ? "preorder" : "in_stock", quantity, unitPrice: p.price, lineTotal: p.price * quantity }; });
-    const order = { orderId: `TRK-${Date.now()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
+    const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
     const endpoint = window.TRikonicOrderEndpoint || "";
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
     try {
+      const { error: saveError } = await supabaseClient.from("orders").insert({
+        order_number: order.orderId,
+        customer_name: order.customer.name,
+        contact: order.customer.contact,
+        delivery_area: order.customer.location || "",
+        notes: order.customer.notes || "",
+        items: order.items,
+        estimated_total: order.estimatedTotal,
+        currency: order.currency
+      });
+      if (saveError) throw saveError;
+      let sheetQueued = true;
       if (endpoint) {
         // Apps Script ContentService redirects its response to googleusercontent.com,
         // which can make a cross-origin fetch look like a failure after the row was
         // written. sendBeacon queues the same JSON POST without needing to read that
         // cross-origin response. Apps Script still receives it as e.postData.contents.
-        const queued = navigator.sendBeacon(endpoint, new Blob([JSON.stringify(order)], { type: "text/plain;charset=utf-8" }));
-        if (!queued) throw new Error("The browser could not queue this order request.");
-      } else {
-        const subject = encodeURIComponent(`Order request ${order.orderId} — Trikonic Imports`);
-        const body = encodeURIComponent(`Hi Trikonic Imports,\n\nPlease confirm this order request.\n\nOrder: ${order.orderId}\nName: ${order.customer.name}\nContact: ${order.customer.contact}\nDelivery area: ${order.customer.location || "Not provided"}\n\n${items.map(i => `${i.quantity} × ${i.name} — ${money(i.lineTotal)}`).join("\n")}\n\nEstimated total: ${money(order.estimatedTotal)}\n\nNotes: ${order.customer.notes || "None"}`);
-        window.location.href = `mailto:hello@trikonic.com?subject=${subject}&body=${body}`;
+        sheetQueued = navigator.sendBeacon(endpoint, new Blob([JSON.stringify(order)], { type: "text/plain;charset=utf-8" }));
       }
-      status.textContent = endpoint ? "Thanks! Your request is on its way. We’ll be in touch to confirm availability, delivery, and payment." : "Your email app is opening with your order. Add a contact email in the code before launch.";
-      if (endpoint) { cart.clear(); renderCart(); e.currentTarget.reset(); }
-    } catch (err) { status.textContent = "We couldn’t send that just now. Please try again or email us directly."; }
+      status.textContent = sheetQueued ? "Thanks! Your request is saved. You can track it from My account; we’ll be in touch to confirm availability, delivery, and payment." : "Your request is saved in My account, but the team’s order sheet could not be reached. Please contact us to confirm.";
+      cart.clear(); saveCart(); renderCart(); e.currentTarget.reset();
+      setTimeout(loadOrderHistory, 0);
+    } catch (err) { status.textContent = err.message || "We couldn’t save that just now. Please try again."; }
     finally { submit.disabled = false; submit.innerHTML = 'Send my request <span>↗</span>'; }
   });
   renderCategories(); renderProducts(); renderCart(); loadProductsFromSheet();
