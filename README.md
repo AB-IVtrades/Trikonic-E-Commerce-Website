@@ -10,7 +10,7 @@ Open `index.html` in a browser, or run a local static server from this folder (f
 
 The storefront uses the Supabase project **Trikonic E-Commerce Website**. `config.js` contains its project URL and public publishable key; a publishable key is meant for browser code. Never put a Supabase secret or service-role key in this repository.
 
-The `public.orders` table is defined in `supabase/schema.sql` and is already installed in the connected Supabase project. To set it up in another project, run that SQL in **Supabase → SQL Editor**. Row Level Security lets authenticated customers insert orders and read only orders linked to their own account. Customers cannot update order status or read another customer's data.
+The `public.orders` and `public.site_settings` tables are defined in `supabase/schema.sql` and are installed in the connected Supabase project. To set them up in another project, run that SQL in **Supabase → SQL Editor**. Row Level Security lets authenticated customers insert orders and read only orders linked to their own account. Customers cannot update order status or read another customer's data. The site settings table exposes only the storefront maintenance flag; its update policy is restricted to the admin email configured in `config.js` (`nkab200321@gmail.com`). Update that email in both `config.js` and the policy in `supabase/schema.sql`/the matching migration if the admin account changes.
 
 In **Supabase → Authentication → URL Configuration**, use `https://trikonicimports.com` as the Site URL and allow the live site and local preview:
 
@@ -28,7 +28,11 @@ Email confirmation is expected for new accounts. The branded confirmation page i
 
 The confirmation page and logo are already branded in the website code. Until custom SMTP is enabled, Supabase's built-in sender is for limited testing and may not send to arbitrary customer addresses. Never share your Resend API key in chat or commit it to GitHub.
 
-The bag is saved in the browser's local storage, so it survives closing and reopening the site on that same browser/device. A customer must sign in to submit an order request. New requests are stored in Supabase for the customer's order history and also sent to the existing Google Sheet for the team.
+The bag is saved in the browser's local storage, so it survives closing and reopening the site on that same browser/device. Checkout prompts new visitors to create an account first (existing customers can switch to sign in); an authenticated account is required to submit an order request. New requests are stored in Supabase for the customer's order history and also sent to the existing Google Sheet for the team.
+
+## Store maintenance mode
+
+Sign in to the site using the admin account (`nkab200321@gmail.com`) and open **My account**. The account panel has a **Storefront control** button to turn maintenance mode on or off. Shoppers see a temporary maintenance page while the catalog and ordering controls are unavailable; the signed-in admin can still access the store and the control. Supabase RLS checks the authenticated email claim when accepting a change, so changing browser code or signing in as an ordinary customer cannot enable or disable the setting. The single boolean is readable by the storefront so it can display the right page.
 
 ## Manage products in Google Sheets
 
