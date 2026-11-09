@@ -64,7 +64,7 @@ The Web App must accept requests from website visitors, so its URL is public. Ke
 
 ### Update order status from the Sheet
 
-The customer’s **My account → Order history** shows a private tracking timeline. Change the `Status` cell in column J of `Trikonic Orders`; the dropdown offers `New`, `Confirmed`, `Preparing`, `In Transit`, `Delivered`, and `Cancelled`. An installable Apps Script edit trigger sends only that order number and status to the Supabase `order-status-sync` function. Supabase records each change, and the customer can open the order card and refresh to see the latest status. The function validates a shared secret and updates by order number; order reads remain protected by the customer ownership policies.
+The customer’s **My account → Order history** shows a private tracking timeline. Change the `Status` cell in column J of `Trikonic Orders`; the dropdown offers `Order Received`, `Payment Made`, `Order Placed`, `Order Shipped`, `Order Arrived in Ghana`, `Order Arrived at Warehouse`, `Order Ready for Collection`, `Order Delivered`, and `Order Cancelled`. An installable Apps Script edit trigger sends only that order number and status to the Supabase `order-status-sync` function. Supabase records each change, and the customer can open the order card and refresh to see the latest status. The function validates a shared secret and updates by order number; order reads remain protected by the customer ownership policies.
 
 One-time secure setup:
 
@@ -72,7 +72,7 @@ One-time secure setup:
 2. In **Supabase → Edge Functions → Secrets**, add `ORDER_STATUS_SYNC_TOKEN` with that value. The `order-status-sync` Edge Function is deployed. Its endpoint is `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync`.
 3. In the spreadsheet, open **Extensions → Apps Script → Project Settings → Script properties** and add `TRIKONIC_STATUS_SYNC_TOKEN` with the exact same value.
 4. Replace the Apps Script editor contents with `google-apps-script.gs` and save. Run `authorizeTrikonicStatusSync` once manually and approve Google's external request permission. This grants the scope that an edit trigger cannot prompt for itself.
-5. Run `setupTrikonicOrdersSheet` and `setupOrderStatusSync` once each. The first function applies the Status dropdown; the second installs the edit trigger.
+5. Run `setupTrikonicOrdersSheet` and `setupOrderStatusSync` once each. The first function refreshes the Status dropdown; the second installs the edit trigger.
 6. Choose **Deploy → Manage deployments**, edit the existing Web App, choose **New version**, and deploy. The existing Web App URL stays the same.
 7. Change a test order’s status in column J and confirm the cell note says it synced. Open that customer’s account, click **Refresh**, and expand the order to view its tracking timeline. Avoid using a real customer order for the test.
 
