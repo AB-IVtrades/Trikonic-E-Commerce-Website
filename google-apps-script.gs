@@ -7,7 +7,7 @@ const SHEET_NAME = "Trikonic Orders";
 const CATALOG_SHEET_NAME = "Website Catalog";
 const STATUS_SYNC_URL = "https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync";
 const STATUS_SYNC_PROPERTY = "TRIKONIC_STATUS_SYNC_TOKEN";
-const ORDER_STATUSES = ["New", "Confirmed", "Preparing", "In Transit", "Delivered", "Cancelled"];
+const ORDER_STATUSES = ["Order Received", "Payment Made", "Order Placed", "Order Shipped", "Order Arrived in Ghana", "Order Arrived at Warehouse", "Order Ready for Collection", "Order Delivered", "Order Cancelled"];
 
 function doGet(e) {
   // Only expose published catalog fields plus name/category/price from the inventory tab.
@@ -74,7 +74,7 @@ function doPost(e) {
     const receivedAt = new Date();
     sheet.appendRow([
       receivedAt, receivedAt, order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
-      order.customer?.location || "", items, Number(order.estimatedTotal || 0), order.customer?.notes || "", "New"
+      order.customer?.location || "", items, Number(order.estimatedTotal || 0), order.customer?.notes || "", "Order Received"
     ]);
     const row = sheet.getLastRow();
     sheet.getRange(row, 1).setNumberFormat("dd mmm yyyy");
