@@ -10,6 +10,9 @@
     : null;
   let signedInUser = null;
   let resumeCheckoutAfterAuth = false;
+  const adminEmail = String(window.TRikonicAdminEmail || "").trim().toLowerCase();
+  let maintenanceMode = false;
+  let maintenanceLoaded = false;
   let cart = new Map();
   try {
     const storedCart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
@@ -174,10 +177,11 @@
   function openCheckout() { $("#checkout-form-view").hidden = false; $("#checkout-success-view").hidden = true; $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); renderCheckoutReceipt(); }
   $("#checkout-open").addEventListener("click", () => {
     setDrawer(false);
+    if (maintenanceMode && !isStoreAdmin()) return;
     if (!signedInUser) {
       resumeCheckoutAfterAuth = true;
-      openAccount();
-      $("#account-status").textContent = "Sign in or create an account to continue with your order request.";
+      openAccount("signup");
+      $("#account-status").textContent = "Create an account or sign in to place your order and track its progress.";
       return;
     }
     openCheckout();
@@ -187,13 +191,49 @@
   $("#receipt-download").addEventListener("click", () => { if (savedReceiptOrder) downloadReceiptPdf(savedReceiptOrder); });
   const accountBackdrop = $("#account-backdrop");
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
-  function openAccount() { accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
+  function isStoreAdmin() { return Boolean(signedInUser?.email && adminEmail && signedInUser.email.trim().toLowerCase() === adminEmail); }
+  function renderMaintenanceMode() {
+    const isAdmin = isStoreAdmin();
+    const screen = $("#maintenance-screen");
+    screen.hidden = maintenanceLoaded && (!maintenanceMode || isAdmin);
+    document.body.classList.toggle("maintenance-active", maintenanceMode && !isAdmin);
+    $("#admin-maintenance-control").hidden = !isAdmin;
+    $("#maintenance-status").textContent = !maintenanceLoaded ? "Checking storefront status…" : maintenanceMode ? "Maintenance mode is on. Shoppers see the maintenance page." : "Maintenance mode is off. The storefront is open.";
+    $("#maintenance-toggle").textContent = maintenanceMode ? "Turn off maintenance mode" : "Turn on maintenance mode";
+    $("#maintenance-toggle").setAttribute("aria-pressed", String(maintenanceMode));
+  }
+  async function loadMaintenanceMode() {
+    if (!supabaseClient) { maintenanceLoaded = true; renderMaintenanceMode(); return; }
+    const { data, error } = await supabaseClient.from("site_settings").select("maintenance_mode").eq("id", 1).maybeSingle();
+    if (error) { console.warn("Could not load storefront maintenance setting.", error); maintenanceLoaded = true; renderMaintenanceMode(); return; }
+    maintenanceMode = Boolean(data?.maintenance_mode);
+    maintenanceLoaded = true;
+    renderMaintenanceMode();
+  }
+  $("#maintenance-toggle").addEventListener("click", async () => {
+    if (!isStoreAdmin() || !supabaseClient) return;
+    const button = $("#maintenance-toggle");
+    button.disabled = true;
+    $("#maintenance-status").textContent = "Saving storefront setting…";
+    const nextMode = !maintenanceMode;
+    const { data, error } = await supabaseClient.from("site_settings").update({ maintenance_mode: nextMode }).eq("id", 1).select("maintenance_mode").single();
+    button.disabled = false;
+    if (error || !data) {
+      $("#maintenance-status").textContent = "Could not update the storefront. Check admin access and try again.";
+      console.error("Could not update maintenance mode.", error);
+      return;
+    }
+    maintenanceMode = Boolean(data.maintenance_mode);
+    renderMaintenanceMode();
+  });
+  function openAccount(mode = "signin") { setAuthMode(mode); accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
   function renderAccountState() {
-    $("#account-open").textContent = signedInUser ? "My account" : "Sign in";
-    $("#checkout-open").innerHTML = signedInUser ? 'Review your request <span>↗</span>' : 'Sign in to continue <span>↗</span>';
+    $("#account-open").textContent = signedInUser ? "My account" : "Create account";
+    $("#checkout-open").innerHTML = signedInUser ? 'Review your request <span>↗</span>' : 'Create an account to order <span>↗</span>';
     $("#account-auth-view").hidden = Boolean(signedInUser);
     $("#account-dashboard").hidden = !signedInUser;
     if (signedInUser) $("#account-email").textContent = signedInUser.email || "Signed in";
+    renderMaintenanceMode();
   }
   async function loadOrderHistory() {
     const history = $("#order-history");
@@ -233,13 +273,14 @@
     const signup = mode === "signup";
     $("#account-name-field").hidden = !signup;
     $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : "Welcome to <em>Trikonic.</em>";
-    $("#account-intro").textContent = signup ? "Save your bag on this device and see your order requests in one place." : "Sign in to place order requests and keep track of them here.";
+    $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here." : "Sign in to place order requests and keep track of them here.";
     $("#account-submit").innerHTML = signup ? "Create account <span>↗</span>" : "Sign in <span>↗</span>";
     $("#account-switch-copy").innerHTML = signup ? 'Already have an account? <button type="button" id="account-switch">Sign in</button>' : 'New here? <button type="button" id="account-switch">Create an account</button>';
     $("#account-form").dataset.mode = mode;
     $("#account-status").textContent = "";
   }
-  $("#account-open").addEventListener("click", openAccount);
+  $("#account-open").addEventListener("click", () => openAccount(signedInUser ? "signin" : "signup"));
+  $("#maintenance-admin-open").addEventListener("click", () => openAccount("signin"));
   $("#account-close").addEventListener("click", closeAccount);
   $("#orders-refresh").addEventListener("click", loadOrderHistory);
   accountBackdrop.addEventListener("click", e => { if (e.target === accountBackdrop) closeAccount(); });
@@ -283,6 +324,7 @@
     supabaseClient.auth.onAuthStateChange((_event, session) => {
       signedInUser = session?.user || null;
       renderAccountState();
+      setTimeout(loadMaintenanceMode, 0);
       if (signedInUser) setTimeout(loadOrderHistory, 0);
       if (signedInUser && resumeCheckoutAfterAuth) {
         resumeCheckoutAfterAuth = false;
@@ -291,14 +333,16 @@
       }
     });
   }
-  renderAccountState(); setAuthMode("signin");
+  renderAccountState(); setAuthMode("signup");
+  loadMaintenanceMode();
   document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); } });
   $("#year").textContent = new Date().getFullYear();
 
   $("#order-form").addEventListener("submit", async e => {
     e.preventDefault();
     const status = $("#form-status"); const submit = $(".submit-order");
-    if (!signedInUser) { closeModal(); openAccount(); $("#account-status").textContent = "Sign in or create an account first so you can track this order."; return; }
+    if (maintenanceMode && !isStoreAdmin()) { closeModal(); return; }
+    if (!signedInUser) { closeModal(); openAccount("signup"); $("#account-status").textContent = "Create an account or sign in first so you can place and track this order."; return; }
     if (!supabaseClient) { status.textContent = "Order tracking is temporarily unavailable. Please try again later."; return; }
     const form = new FormData(e.currentTarget);
     const items = [...cart.entries()].filter(([, q]) => q > 0).map(([id, quantity]) => { const p = products.find(x => x.id === id); return { id, name: p.name, availability: p.availability === "preorder" ? "preorder" : "in_stock", quantity, unitPrice: p.price, lineTotal: p.price * quantity }; });
