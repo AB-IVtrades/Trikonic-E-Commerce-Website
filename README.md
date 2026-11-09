@@ -41,14 +41,14 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-The site does not take payment. Customers sign in and submit an order request; the request is saved to their Supabase order history and sent to `Trikonic Orders` in Google Sheets. Your team then confirms availability, delivery, and payment with them.
+The site does not take payment. Customers sign in and submit an order request; the request is saved to their Supabase order history and sent to `Trikonic Orders` in Google Sheets. Your team then confirms availability, delivery, and payment with them. After an order is saved, the customer can download a PDF order-request receipt. It is not proof of payment; shipping is paid separately by the customer and is excluded from the item subtotal.
 
 To connect the order form and product catalog to the existing Sheet:
 
 1. In the Trikonic spreadsheet choose **Extensions → Apps Script**.
-2. Replace the editor contents with `google-apps-script.gs` from this project and save. It reads the `Website Catalog` tab and writes new orders to `Trikonic Orders`.
+2. Replace the editor contents with `google-apps-script.gs` from this project and save. It reads the `Website Catalog` tab and writes new orders to `Trikonic Orders`. The updated script adds separate `Order Date` and `Order Time` columns, preserving existing order columns and filling the time for existing rows from their timestamp.
 3. In Apps Script choose **Deploy → Manage deployments**, edit the Web App deployment, select **New version**, and deploy. Keep **Execute as** set to your account and **Who has access** set to **Anyone**. The Web App URL should remain the same, so `config.js` does not need a change.
-4. Refresh the website. For order setup, submit one clearly marked test order and check `Trikonic Orders` and **My account → Order history**; remove any test records afterwards.
+4. Refresh the website. The date/time headers and existing row migration happen when the first order reaches the newly deployed script. Submit one clearly marked test order and check `Trikonic Orders` and **My account → Order history**; remove any test records afterwards.
 
 The Web App must accept requests from website visitors, so its URL is public. Keep only order fields in this spreadsheet, restrict spreadsheet access to your team, and redeploy the Apps Script deployment after changing its code. The website queues each request with a browser POST. Google Apps Script redirects its response, so the browser cannot verify the Sheet write; the customer sees an “on its way” message after the browser queues it. Check the Sheet when you first set this up.
 

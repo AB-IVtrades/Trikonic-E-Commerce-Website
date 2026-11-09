@@ -66,17 +66,45 @@ function doPost(e) {
     const order = JSON.parse(e.postData.contents);
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME)
       || SpreadsheetApp.getActiveSpreadsheet().insertSheet(SHEET_NAME);
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(["Received at", "Order ID", "Customer", "Contact", "Delivery area", "Items", "Estimated total (GHS)", "Notes", "Status"]);
-      sheet.setFrozenRows(1);
-    }
+    ensureOrderHeaders(sheet);
     const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.availability === "preorder" ? " [PRE-ORDER]" : " [IN STOCK]"} @ GHS ${item.unitPrice}`).join("; ");
+    const receivedAt = new Date();
     sheet.appendRow([
-      new Date(), order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
+      receivedAt, receivedAt, order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
       order.customer?.location || "", items, Number(order.estimatedTotal || 0), order.customer?.notes || "", "New"
     ]);
+    const row = sheet.getLastRow();
+    sheet.getRange(row, 1).setNumberFormat("dd mmm yyyy");
+    sheet.getRange(row, 2).setNumberFormat("hh:mm:ss AM/PM");
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(error) })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function ensureOrderHeaders(sheet) {
+  const headers = ["Order Date", "Order Time", "Order ID", "Customer", "Contact", "Delivery area", "Items", "Estimated total (GHS)", "Notes", "Status"];
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
+  } else {
+    const lastColumn = Math.max(sheet.getLastColumn(), 1);
+    const current = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(value => String(value).trim());
+    if (current[0] === "Received at" && current[1] !== "Order Time") {
+      // Preserve existing order columns while splitting the timestamp into date and time.
+      sheet.insertColumnAfter(1);
+      sheet.getRange(1, 1, 1, 2).setValues([["Order Date", "Order Time"]]);
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        const timestamps = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        sheet.getRange(2, 2, timestamps.length, 1).setValues(timestamps);
+      }
+    } else if (current[0] !== "Order Date" || current[1] !== "Order Time") {
+      throw new Error("The Trikonic Orders header row is unexpected. Please check it before accepting orders.");
+    }
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
+  }
+  sheet.getRange("A:A").setNumberFormat("dd mmm yyyy");
+  sheet.getRange("B:B").setNumberFormat("hh:mm:ss AM/PM");
 }

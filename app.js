@@ -16,6 +16,97 @@
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
   function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify([...cart])); } catch (_) {} }
+  let savedReceiptOrder = null;
+  function renderCheckoutReceipt(target = "#checkout-receipt-items", totalTarget = "#checkout-total") {
+    const rows = [...cart.entries()].filter(([, qty]) => qty > 0).map(([id, quantity]) => {
+      const product = products.find(item => item.id === id);
+      return product ? { product, quantity } : null;
+    }).filter(Boolean);
+    $(target).innerHTML = rows.length
+      ? rows.map(({ product, quantity }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}</span><strong>${money(product.price * quantity)}</strong></div>`).join("")
+      : '<p class="receipt-empty">Your bag is empty.</p>';
+    if (totalTarget) $(totalTarget).textContent = money(rows.reduce((sum, row) => sum + row.product.price * row.quantity, 0));
+  }
+
+  function downloadReceiptPdf(order) {
+    const ascii = value => String(value ?? "").normalize("NFKD").replace(/[^\x20-\x7e]/g, "");
+    const escapePdf = value => ascii(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const pages = [];
+    let operations = [];
+    let y = 780;
+    const startPage = () => { operations = []; pages.push(operations); y = 780; };
+    const write = (text, size = 10, indent = 0) => {
+      const clean = ascii(text);
+      const maxChars = Math.max(24, Math.floor(88 - indent / 4));
+      const words = clean.split(/\s+/);
+      const wrapped = [];
+      let line = "";
+      words.forEach(word => {
+        if (line && `${line} ${word}`.length > maxChars) { wrapped.push(line); line = word; }
+        else line += `${line ? " " : ""}${word}`;
+      });
+      if (line) wrapped.push(line);
+      wrapped.forEach(part => {
+        if (y < 58) startPage();
+        operations.push(`BT /F1 ${size} Tf ${50 + indent} ${y} Td (${escapePdf(part)}) Tj ET`);
+        y -= Math.max(15, size + 6);
+      });
+    };
+    const rule = () => { if (y < 70) startPage(); operations.push(`0.75 w 50 ${y} m 545 ${y} l S`); y -= 16; };
+    startPage();
+    write("TRIKONIC IMPORTS", 20);
+    write("ORDER REQUEST RECEIPT", 10);
+    write(`Order ID: ${order.orderId}`, 10);
+    write(`Date: ${new Date(order.createdAt).toLocaleString()}`, 10);
+    rule();
+    write("CUSTOMER", 10);
+    write(`Name: ${order.customer.name}`);
+    write(`Contact: ${order.customer.contact}`);
+    if (order.customer.location) write(`Delivery area: ${order.customer.location}`);
+    rule();
+    write("ITEMS", 10);
+    order.items.forEach(item => {
+      const availability = item.availability === "preorder" ? " (PRE-ORDER)" : "";
+      write(`${item.quantity} x ${item.name}${availability} - GHS ${(Number(item.lineTotal) || 0).toFixed(2)}`, 10, 8);
+    });
+    rule();
+    write(`Estimated item subtotal: GHS ${Number(order.estimatedTotal).toFixed(2)}`, 12);
+    write("Shipping fee is paid by the customer separately.");
+    write("Shipping amount will be confirmed and is not included above.");
+    rule();
+    write("This confirms an order request only. No payment has been taken.", 9);
+
+    const objects = [];
+    const setObject = (id, value) => { objects[id] = value; };
+    setObject(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    const pageIds = pages.map((_, index) => 4 + index * 2);
+    setObject(2, `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`);
+    setObject(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    pages.forEach((pageOps, index) => {
+      const pageId = pageIds[index];
+      const streamId = pageId + 1;
+      const stream = pageOps.join("\n");
+      setObject(pageId, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${streamId} 0 R >>`);
+      setObject(streamId, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    });
+    let pdf = "%PDF-1.4\n";
+    const offsets = [0];
+    for (let id = 1; id < objects.length; id++) {
+      offsets[id] = pdf.length;
+      pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+    }
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+    for (let id = 1; id < objects.length; id++) pdf += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
+    pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    const blob = new Blob([pdf], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Trikonic-Receipt-${ascii(order.orderId).replace(/[^a-zA-Z0-9-]/g, "")}.pdf`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   function renderProducts() {
     const shown = category === "All finds" ? products : products.filter(p => p.category === category);
@@ -49,6 +140,7 @@
     $("#subtotal").textContent = money(total); $("#checkout-total").textContent = money(total);
     $("#cart-empty").hidden = count > 0; $("#cart-bottom").hidden = count === 0;
     $("#cart-items").innerHTML = entries.map(([id, qty]) => { const p = products.find(x => x.id === id); const preorder = p.availability === "preorder"; return `<article class="cart-item"><img src="${escapeAttr(p.image)}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3><span class="cart-availability ${preorder ? "preorder" : "in-stock"}">${preorder ? "PRE-ORDER" : "IN STOCK"}</span><strong>${money(p.price)}</strong><div class="quantity"><button data-qty="${id}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${id}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}">+</button></div></div><button class="remove-item" data-remove="${id}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
+    renderCheckoutReceipt();
   }
   function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -60,9 +152,10 @@
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
   });
   $("#cart-open").addEventListener("click", () => setDrawer(true)); $("#cart-close").addEventListener("click", () => setDrawer(false)); $("#overlay").addEventListener("click", () => setDrawer(false)); $("#continue-shopping").addEventListener("click", () => setDrawer(false));
-  $("#checkout-open").addEventListener("click", () => { setDrawer(false); $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); });
+  $("#checkout-open").addEventListener("click", () => { setDrawer(false); $("#checkout-form-view").hidden = false; $("#checkout-success-view").hidden = true; $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); renderCheckoutReceipt(); });
   const closeModal = () => { $("#modal-backdrop").classList.remove("show"); document.body.classList.remove("no-scroll"); };
   $("#checkout-close").addEventListener("click", closeModal); $("#modal-backdrop").addEventListener("click", e => { if (e.target.id === "modal-backdrop") closeModal(); });
+  $("#receipt-download").addEventListener("click", () => { if (savedReceiptOrder) downloadReceiptPdf(savedReceiptOrder); });
   const accountBackdrop = $("#account-backdrop");
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
   function openAccount() { accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
@@ -169,6 +262,9 @@
         currency: order.currency
       });
       if (saveError) throw saveError;
+      savedReceiptOrder = order;
+      $("#success-order-id").textContent = `Order ID: ${order.orderId}`;
+      renderCheckoutReceipt("#success-receipt-items", "#success-receipt-total");
       let sheetQueued = true;
       if (endpoint) {
         // Apps Script ContentService redirects its response to googleusercontent.com,
@@ -177,7 +273,8 @@
         // cross-origin response. Apps Script still receives it as e.postData.contents.
         sheetQueued = navigator.sendBeacon(endpoint, new Blob([JSON.stringify(order)], { type: "text/plain;charset=utf-8" }));
       }
-      status.textContent = sheetQueued ? "Thanks! Your request is saved. You can track it from My account; we’ll be in touch to confirm availability, delivery, and payment." : "Your request is saved in My account, but the team’s order sheet could not be reached. Please contact us to confirm.";
+      $("#success-message").textContent = sheetQueued ? "Your request is saved. Download this receipt for your records; we’ll contact you to confirm availability and delivery." : "Your request is saved in your account, but the order sheet could not be reached. Download this receipt and contact us to confirm.";
+      $("#checkout-form-view").hidden = true; $("#checkout-success-view").hidden = false;
       cart.clear(); saveCart(); renderCart(); e.currentTarget.reset();
       setTimeout(loadOrderHistory, 0);
     } catch (err) { status.textContent = err.message || "We couldn’t save that just now. Please try again."; }
