@@ -4,5 +4,8 @@ window.TRikonicSupabaseConfig = {
   publishableKey: "sb_publishable_dVZkPidBEDtVB1U_YeRWzQ_jyHItAKN"
 };
 
+// UI hint only. Supabase row-level security independently enforces this admin email.
+window.TRikonicAdminEmail = "nkab200321@gmail.com";
+
 // Google Apps Script order receiver.
 window.TRikonicOrderEndpoint = "https://script.google.com/macros/s/AKfycbykXdaTNKvSu4fTTc_ZXdSLJopYxm_dO1hB8dZz1IpfNeA_Q82q3UId-_ryWjlP4PGvEw/exec";
