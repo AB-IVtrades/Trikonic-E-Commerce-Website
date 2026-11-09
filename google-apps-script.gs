@@ -14,7 +14,7 @@ function doPost(e) {
       sheet.appendRow(["Received at", "Order ID", "Customer", "Contact", "Delivery area", "Items", "Estimated total (GHS)", "Notes", "Status"]);
       sheet.setFrozenRows(1);
     }
-    const items = (order.items || []).map(item => `${item.quantity} x ${item.name} @ GHS ${item.unitPrice}`).join("; ");
+    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.availability === "preorder" ? " [PRE-ORDER]" : " [IN STOCK]"} @ GHS ${item.unitPrice}`).join("; ");
     sheet.appendRow([
       new Date(), order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
       order.customer?.location || "", items, Number(order.estimatedTotal || 0), order.customer?.notes || "", "New"

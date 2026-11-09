@@ -8,7 +8,7 @@
 
   function renderProducts() {
     const shown = category === "All finds" ? products : products.filter(p => p.category === category);
-    grid.innerHTML = shown.map(p => `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><img src="${escapeAttr(p.image)}" alt="${escapeAttr(p.name)}" loading="lazy"><span class="product-tag">${escapeHtml(p.tag || p.category)}</span><button class="quick-add" data-add="${escapeAttr(p.id)}" aria-label="Add ${escapeAttr(p.name)} to bag">+</button></div><div class="product-meta"><div><span class="product-category">${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p></div><strong>${money(p.price)}</strong></div></article>`).join("");
+    grid.innerHTML = shown.map(p => { const preorder = p.availability === "preorder"; return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><img src="${escapeAttr(p.image)}" alt="${escapeAttr(p.name)}" loading="lazy"><span class="product-tag">${escapeHtml(p.tag || p.category)}</span><button class="quick-add" data-add="${escapeAttr(p.id)}" aria-label="Add ${escapeAttr(p.name)} to bag">+</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : "in-stock"}">${preorder ? "PRE-ORDER" : "IN STOCK"}</span></div><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p></div><strong>${money(p.price)}</strong></div></article>`; }).join("");
   }
   function renderCategories() {
     const cats = ["All finds", ...new Set(products.map(p => p.category))];
@@ -21,7 +21,7 @@
     $("#cart-count").textContent = count; $("#drawer-count").textContent = `(${count})`;
     $("#subtotal").textContent = money(total); $("#checkout-total").textContent = money(total);
     $("#cart-empty").hidden = count > 0; $("#cart-bottom").hidden = count === 0;
-    $("#cart-items").innerHTML = entries.map(([id, qty]) => { const p = products.find(x => x.id === id); return `<article class="cart-item"><img src="${escapeAttr(p.image)}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3><strong>${money(p.price)}</strong><div class="quantity"><button data-qty="${id}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${id}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}">+</button></div></div><button class="remove-item" data-remove="${id}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
+    $("#cart-items").innerHTML = entries.map(([id, qty]) => { const p = products.find(x => x.id === id); const preorder = p.availability === "preorder"; return `<article class="cart-item"><img src="${escapeAttr(p.image)}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3><span class="cart-availability ${preorder ? "preorder" : "in-stock"}">${preorder ? "PRE-ORDER" : "IN STOCK"}</span><strong>${money(p.price)}</strong><div class="quantity"><button data-qty="${id}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${id}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}">+</button></div></div><button class="remove-item" data-remove="${id}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
   }
   function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -43,7 +43,7 @@
     e.preventDefault();
     const status = $("#form-status"); const submit = $(".submit-order");
     const form = new FormData(e.currentTarget);
-    const items = [...cart.entries()].filter(([, q]) => q > 0).map(([id, quantity]) => { const p = products.find(x => x.id === id); return { id, name: p.name, quantity, unitPrice: p.price, lineTotal: p.price * quantity }; });
+    const items = [...cart.entries()].filter(([, q]) => q > 0).map(([id, quantity]) => { const p = products.find(x => x.id === id); return { id, name: p.name, availability: p.availability === "preorder" ? "preorder" : "in_stock", quantity, unitPrice: p.price, lineTotal: p.price * quantity }; });
     const order = { orderId: `TRK-${Date.now()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
     const endpoint = window.TRikonicOrderEndpoint || "";
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
