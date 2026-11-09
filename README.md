@@ -42,9 +42,13 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 
 - `Description`: the text customers see.
 - `Photo URL`: a publicly accessible image URL, or a repository path such as `images/raffia-tote.webp`.
-- `Availability`: choose `In Stock` or `Pre-Order` from the dropdown. The site accepts either capitalization and common variants such as `pre-order`.
+- `Availability`: choose `In Stock`, `Pre-Order`, or `Out of Stock` from the dropdown. Out-of-stock items remain visible but cannot be added to the bag, and an already-saved bag must have those items removed before checkout.
 - `Tag` and `Card Color`: optional display styling; card color can be a hex value such as `#e5dcd0`.
 - `Show on website`: enter `TRUE` to publish that row or `FALSE` to hide it.
+- `Flash Sale`: choose `TRUE` while the item should be discounted; choose `FALSE` (or leave it off) to show its regular price.
+- `Sale Price (GHS)`: the temporary discounted price. The site uses it only when `Flash Sale` is `TRUE` and the sale price is a valid amount below the regular `Products` tab selling price. Sale prices are shown alongside the crossed-out regular price and are saved onto the order receipt.
+
+After updating `google-apps-script.gs` in the spreadsheet’s **Extensions → Apps Script**, save it and run `setupTrikonicCatalogSheet` once. This adds the two sale columns if missing and refreshes the availability and sale dropdowns without changing existing product values. Then redeploy the existing Web App as a **New version** so the storefront starts reading these fields. The Web App URL stays the same.
 
 Only rows marked `TRUE` with a matching SKU and photo are sent to the storefront. Change prices and product names in the existing blue editable columns of the `Products` tab; update photos, descriptions, availability, and visibility in `Website Catalog`. The website receives these catalog fields only; it does not expose stock quantities, profit, or order data. Refresh the site after edits. Once Vercel is connected to the repository, spreadsheet edits do not require a code edit or GitHub commit.
 
