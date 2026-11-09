@@ -21,6 +21,15 @@
   let category = "All finds";
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
+  function parseCartKey(key) {
+    try { const parsed = JSON.parse(key); if (Array.isArray(parsed) && parsed.length === 3) return { id: String(parsed[0]), color: String(parsed[1] || ""), size: String(parsed[2] || "") }; } catch (_) {}
+    return { id: String(key), color: "", size: "" };
+  }
+  function cartKey(id, color = "", size = "") { return color || size ? JSON.stringify([String(id), String(color), String(size)]) : String(id); }
+  function productForCartKey(key) { const { id } = parseCartKey(key); return products.find(item => item.id === id); }
+  function cartSelectionIsValid(product, selection) {
+    return Boolean(product && (!product.colors?.length || product.colors.includes(selection.color)) && (!product.sizes?.length || product.sizes.includes(selection.size)));
+  }
   function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify([...cart])); } catch (_) {} }
   function resolveProductImage(source) {
     const image = String(source || "").trim();
@@ -31,12 +40,12 @@
   }
   let savedReceiptOrder = null;
   function renderCheckoutReceipt(target = "#checkout-receipt-items", totalTarget = "#checkout-total") {
-    const rows = [...cart.entries()].filter(([, qty]) => qty > 0).map(([id, quantity]) => {
-      const product = products.find(item => item.id === id);
-      return product ? { product, quantity } : null;
+    const rows = [...cart.entries()].filter(([, qty]) => qty > 0).map(([key, quantity]) => {
+      const product = productForCartKey(key);
+      return product ? { product, quantity, selection: parseCartKey(key) } : null;
     }).filter(Boolean);
     $(target).innerHTML = rows.length
-      ? rows.map(({ product, quantity }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}</span><strong>${money(product.price * quantity)}</strong></div>`).join("")
+      ? rows.map(({ product, quantity, selection }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}${selection.color || selection.size ? `<small class="variant-summary">${[selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(product.price * quantity)}</strong></div>`).join("")
       : '<p class="receipt-empty">Your bag is empty.</p>';
     if (totalTarget) $(totalTarget).textContent = money(rows.reduce((sum, row) => sum + row.product.price * row.quantity, 0));
   }
@@ -81,7 +90,8 @@
     order.items.forEach(item => {
       const availability = item.availability === "preorder" ? " (PRE-ORDER)" : item.availability === "out_of_stock" ? " (OUT OF STOCK)" : "";
       const sale = item.flashSale ? " (FLASH SALE)" : "";
-      write(`${item.quantity} x ${item.name}${availability}${sale} - GHS ${(Number(item.lineTotal) || 0).toFixed(2)}`, 10, 8);
+      const options = [item.color && `Color: ${item.color}`, item.size && `Size: ${item.size}`].filter(Boolean).join(", ");
+      write(`${item.quantity} x ${item.name}${options ? ` (${options})` : ""}${availability}${sale} - GHS ${(Number(item.lineTotal) || 0).toFixed(2)}`, 10, 8);
     });
     rule();
     write(`Estimated item subtotal: GHS ${Number(order.estimatedTotal).toFixed(2)}`, 12);
@@ -132,8 +142,9 @@
       const preorder = p.availability === "preorder";
       const outOfStock = p.availability === "out_of_stock";
       const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK";
+      const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
       const price = p.flashSale ? `<span class="sale-prices"><s>${money(p.originalPrice)}</s><strong>${money(p.price)}</strong></span>` : `<strong>${money(p.price)}</strong>`;
-      return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-add="${escapeAttr(p.id)}" aria-label="${outOfStock ? `${escapeAttr(p.name)} is out of stock` : `Add ${escapeAttr(p.name)} to bag`}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "×" : "+"}</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p></div>${price}</div></article>`;
+      return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-add="${escapeAttr(p.id)}" aria-label="${outOfStock ? `${escapeAttr(p.name)} is out of stock` : optionsLabel ? `Choose options for ${escapeAttr(p.name)}` : `Add ${escapeAttr(p.name)} to bag`}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "×" : "+"}</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div>${price}</div></article>`;
     }).join("");
   }
   function renderCategories() {
@@ -162,25 +173,69 @@
     document.head.appendChild(script);
   }
   function renderCart() {
-    const entries = [...cart.entries()].filter(([id, qty]) => qty > 0 && products.some(p => p.id === id));
+    const entries = [...cart.entries()].filter(([key, qty]) => qty > 0 && productForCartKey(key));
     const count = entries.reduce((s, [, q]) => s + q, 0);
-    const total = entries.reduce((s, [id, q]) => s + (products.find(p => p.id === id)?.price || 0) * q, 0);
+    const total = entries.reduce((s, [key, q]) => s + (productForCartKey(key)?.price || 0) * q, 0);
     $("#cart-count").textContent = count; $("#drawer-count").textContent = `(${count})`;
     $("#subtotal").textContent = money(total); $("#checkout-total").textContent = money(total);
     $("#cart-empty").hidden = count > 0; $("#cart-bottom").hidden = count === 0;
-    const hasOutOfStock = entries.some(([id]) => products.find(p => p.id === id)?.availability === "out_of_stock");
-    $("#cart-stock-warning").hidden = !hasOutOfStock;
-    $("#checkout-open").disabled = hasOutOfStock;
-    $("#cart-items").innerHTML = entries.map(([id, qty]) => { const p = products.find(x => x.id === id); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock"; const badge = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = p.flashSale ? `<span class="sale-prices"><s>${money(p.originalPrice)}</s><strong>${money(p.price)}</strong></span>` : `<strong>${money(p.price)}</strong>`; return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3><span class="cart-availability ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${id}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${id}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${id}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
+    const hasOutOfStock = entries.some(([key]) => productForCartKey(key)?.availability === "out_of_stock");
+    const hasInvalidOptions = entries.some(([key]) => { const product = productForCartKey(key); return !cartSelectionIsValid(product, parseCartKey(key)); });
+    $("#cart-stock-warning").hidden = !hasOutOfStock && !hasInvalidOptions;
+    $("#cart-stock-warning").textContent = hasOutOfStock ? "Remove out-of-stock items before continuing." : "Some saved colour or size choices are no longer available. Remove those items before continuing.";
+    $("#checkout-open").disabled = hasOutOfStock || hasInvalidOptions;
+    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", invalid = !cartSelectionIsValid(p, selection); const badge = invalid ? "OPTION UNAVAILABLE" : preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = p.flashSale ? `<span class="sale-prices"><s>${money(p.originalPrice)}</s><strong>${money(p.price)}</strong></span>` : `<strong>${money(p.price)}</strong>`; const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${invalid ? "out-of-stock" : preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
     renderCheckoutReceipt();
   }
   function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
+  const variantBackdrop = $("#variant-backdrop");
+  let pendingVariantProduct = null;
+  function fillVariantSelect(select, values, label) {
+    select.required = values.length > 0;
+    select.innerHTML = `<option value="">Choose ${label.toLowerCase()}</option>${values.map(value => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("")}`;
+  }
+  function openVariantPicker(product) {
+    pendingVariantProduct = product;
+    $("#variant-product-name").textContent = `${product.name} · ${money(product.price)}${product.flashSale ? ` (was ${money(product.originalPrice)})` : ""}`;
+    $("#variant-color-field").hidden = !product.colors?.length;
+    $("#variant-size-field").hidden = !product.sizes?.length;
+    fillVariantSelect($("#variant-color"), product.colors || [], "colour");
+    fillVariantSelect($("#variant-size"), product.sizes || [], "size");
+    $("#variant-status").textContent = "";
+    variantBackdrop.classList.add("show");
+    variantBackdrop.setAttribute("aria-hidden", "false");
+    document.body.classList.add("no-scroll");
+  }
+  function closeVariantPicker() {
+    variantBackdrop.classList.remove("show");
+    variantBackdrop.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("no-scroll");
+    pendingVariantProduct = null;
+  }
+  function addProductToCart(product, color = "", size = "") {
+    const key = cartKey(product.id, color, size);
+    cart.set(key, (cart.get(key) || 0) + 1);
+    saveCart(); renderCart();
+  }
+  $("#variant-close").addEventListener("click", closeVariantPicker);
+  variantBackdrop.addEventListener("click", event => { if (event.target === variantBackdrop) closeVariantPicker(); });
+  $("#variant-form").addEventListener("submit", event => {
+    event.preventDefault();
+    if (!pendingVariantProduct) return;
+    const color = $("#variant-color").value, size = $("#variant-size").value;
+    if ((pendingVariantProduct.colors?.length && !color) || (pendingVariantProduct.sizes?.length && !size)) {
+      $("#variant-status").textContent = "Choose the available colour and size to continue.";
+      return;
+    }
+    addProductToCart(pendingVariantProduct, color, size);
+    closeVariantPicker();
+  });
   document.addEventListener("click", e => {
-    const add = e.target.closest("[data-add]"); if (add) { const product = products.find(p => p.id === add.dataset.add); if (!product || product.availability === "out_of_stock") return; cart.set(add.dataset.add, (cart.get(add.dataset.add) || 0) + 1); saveCart(); renderCart(); add.classList.add("added"); add.textContent = "✓"; setTimeout(() => { add.classList.remove("added"); add.textContent = "+"; }, 800); }
+    const add = e.target.closest("[data-add]"); if (add) { const product = products.find(p => p.id === add.dataset.add); if (!product || product.availability === "out_of_stock") return; if (product.colors?.length || product.sizes?.length) openVariantPicker(product); else addProductToCart(product); }
     const filter = e.target.closest("[data-category]"); if (filter) { category = filter.dataset.category; renderCategories(); renderProducts(); }
-    const qty = e.target.closest("[data-qty]"); if (qty) { const product = products.find(p => p.id === qty.dataset.qty); if (Number(qty.dataset.delta) > 0 && product?.availability === "out_of_stock") return; cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
+    const qty = e.target.closest("[data-qty]"); if (qty) { const product = productForCartKey(qty.dataset.qty); if (Number(qty.dataset.delta) > 0 && product?.availability === "out_of_stock") return; cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
   });
   $("#cart-open").addEventListener("click", () => setDrawer(true)); $("#cart-close").addEventListener("click", () => setDrawer(false)); $("#overlay").addEventListener("click", () => setDrawer(false)); $("#continue-shopping").addEventListener("click", () => setDrawer(false));
@@ -262,7 +317,7 @@
     history.innerHTML = data.map(order => {
       const date = new Date(order.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
       const lineItems = Array.isArray(order.items) ? order.items : [];
-      const summary = lineItems.map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}`).join(" · ");
+      const summary = lineItems.map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? ` (${[item.color, item.size].filter(Boolean).map(escapeHtml).join(", ")})` : ""}`).join(" · ");
       const current = displayStatus(order.status);
       const currentIndex = stages.findIndex(stage => normalized(stage) === normalized(current));
       const events = Array.isArray(order.order_status_events) ? order.order_status_events : [];
@@ -275,7 +330,7 @@
           return `<li class="${done ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><span class="progress-dot" aria-hidden="true"></span><span class="progress-copy"><strong>${escapeHtml(stage)}</strong>${when ? `<time>${escapeHtml(when)}</time>` : ""}</span></li>`;
         }).join("")}</ol>`;
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
-      const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
+      const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
       return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">View order tracking <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p></div></details>`;
     }).join("");
   }
@@ -345,7 +400,7 @@
   }
   renderAccountState(); setAuthMode("signup");
   loadMaintenanceMode();
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); } });
   $("#year").textContent = new Date().getFullYear();
 
   $("#order-form").addEventListener("submit", async e => {
@@ -355,8 +410,9 @@
     if (!signedInUser) { closeModal(); openAccount("signup"); $("#account-status").textContent = "Create an account or sign in first so you can place and track this order."; return; }
     if (!supabaseClient) { status.textContent = "Order tracking is temporarily unavailable. Please try again later."; return; }
     const form = new FormData(e.currentTarget);
-    const items = [...cart.entries()].filter(([, q]) => q > 0).map(([id, quantity]) => { const p = products.find(x => x.id === id); return { id, name: p.name, availability: p.availability, flashSale: Boolean(p.flashSale), quantity, unitPrice: p.price, lineTotal: p.price * quantity }; });
+    const items = [...cart.entries()].filter(([, quantity]) => quantity > 0).map(([key, quantity]) => { const p = productForCartKey(key), selection = parseCartKey(key); return p ? { id: p.id, name: p.name, color: selection.color, size: selection.size, availability: p.availability, flashSale: Boolean(p.flashSale), quantity, unitPrice: p.price, lineTotal: p.price * quantity } : null; }).filter(Boolean);
     if (items.some(item => item.availability === "out_of_stock")) { status.textContent = "Your bag contains an out-of-stock item. Remove it before sending your order."; return; }
+    if ([...cart.entries()].some(([key]) => !cartSelectionIsValid(productForCartKey(key), parseCartKey(key)))) { status.textContent = "A colour or size in your bag is no longer available. Remove that item and choose an available option."; return; }
     const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
     const endpoint = window.TRikonicOrderEndpoint || "";
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
