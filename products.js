@@ -1,0 +1,12 @@
+// Edit this list to add, remove, or update products. Prices are in Ghana cedis (GH₵).
+// Use a public image URL (for example, an image uploaded to your site's /images folder).
+window.PRODUCTS = [
+  { id: "everyday-watch", name: "The Everyday Watch", category: "Accessories", price: 285, description: "A clean, easy-wear classic for every day.", image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=85", tag: "JUST IN", color: "#e5dcd0" },
+  { id: "weekend-tote", name: "The Weekend Tote", category: "Everyday", price: 165, description: "Room for the little things and the big plans.", image: "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=85", tag: "GOOD PICK", color: "#dedfd5" },
+  { id: "soft-glow-lamp", name: "Soft Glow Lamp", category: "Home", price: 390, description: "A warm little glow for slow evenings.", image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=85", tag: "LIMITED", color: "#e9e1d8" },
+  { id: "daily-carry", name: "Daily Carry Pouch", category: "Accessories", price: 120, description: "Your everyday essentials, all in one place.", image: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=85", tag: "SMALL BATCH", color: "#e1ddd1" },
+  { id: "little-speaker", name: "Little Sound Speaker", category: "Tech", price: 450, description: "Good sound. Small footprint. All-day company.", image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=85", tag: "FAN FAVE", color: "#dce1df" },
+  { id: "weekender-bottle", name: "The Weekender Bottle", category: "Everyday", price: 95, description: "A handy companion for wherever the day goes.", image: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=900&q=85", tag: "JUST IN", color: "#e5e1d6" },
+  { id: "desk-side-clock", name: "Desk Side Clock", category: "Home", price: 210, description: "A little shape and calm for your workspace.", image: "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?auto=format&fit=crop&w=900&q=85", tag: "GOOD PICK", color: "#e4dcd4" },
+  { id: "easy-earbuds", name: "Easy Listening Earbuds", category: "Tech", price: 320, description: "Your playlist, your pace, wherever you are.", image: "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=900&q=85", tag: "SMALL BATCH", color: "#dfe1e4" }
+];
