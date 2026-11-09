@@ -82,6 +82,13 @@ function doPost(e) {
   }
 }
 
+// Run once from the Apps Script editor to add/backfill the date and time columns now.
+function setupTrikonicOrdersSheet() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(SHEET_NAME) || spreadsheet.insertSheet(SHEET_NAME);
+  ensureOrderHeaders(sheet);
+}
+
 function ensureOrderHeaders(sheet) {
   const headers = ["Order Date", "Order Time", "Order ID", "Customer", "Contact", "Delivery area", "Items", "Estimated total (GHS)", "Notes", "Status"];
   if (sheet.getLastRow() === 0) {

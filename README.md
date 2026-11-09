@@ -46,9 +46,10 @@ The site does not take payment. Customers sign in and submit an order request; t
 To connect the order form and product catalog to the existing Sheet:
 
 1. In the Trikonic spreadsheet choose **Extensions → Apps Script**.
-2. Replace the editor contents with `google-apps-script.gs` from this project and save. It reads the `Website Catalog` tab and writes new orders to `Trikonic Orders`. The updated script adds separate `Order Date` and `Order Time` columns, preserving existing order columns and filling the time for existing rows from their timestamp.
-3. In Apps Script choose **Deploy → Manage deployments**, edit the Web App deployment, select **New version**, and deploy. Keep **Execute as** set to your account and **Who has access** set to **Anyone**. The Web App URL should remain the same, so `config.js` does not need a change.
-4. Refresh the website. The date/time headers and existing row migration happen when the first order reaches the newly deployed script. Submit one clearly marked test order and check `Trikonic Orders` and **My account → Order history**; remove any test records afterwards.
+2. Replace the editor contents with `google-apps-script.gs` from this project and save. It reads the `Website Catalog` tab and writes new orders to `Trikonic Orders`.
+3. In the function picker, choose `setupTrikonicOrdersSheet` and click **Run** once. Approve the Apps Script authorization prompt. This immediately adds separate `Order Date` and `Order Time` columns, preserves the existing order columns, and fills times for existing rows from their timestamp. New orders also get the date and time automatically.
+4. In Apps Script choose **Deploy → Manage deployments**, edit the Web App deployment, select **New version**, and deploy. Keep **Execute as** set to your account and **Who has access** set to **Anyone**. The Web App URL should remain the same, so `config.js` does not need a change.
+5. Refresh the website. Submit one clearly marked test order and check `Trikonic Orders` and **My account → Order history**; remove any test records afterwards.
 
 The Web App must accept requests from website visitors, so its URL is public. Keep only order fields in this spreadsheet, restrict spreadsheet access to your team, and redeploy the Apps Script deployment after changing its code. The website queues each request with a browser POST. Google Apps Script redirects its response, so the browser cannot verify the Sheet write; the customer sees an “on its way” message after the browser queues it. Check the Sheet when you first set this up.
 
