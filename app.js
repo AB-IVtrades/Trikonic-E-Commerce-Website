@@ -200,14 +200,31 @@
     const status = $("#orders-status");
     if (!signedInUser || !supabaseClient) return;
     status.textContent = "Loading your orders…";
-    const { data, error } = await supabaseClient.from("orders").select("order_number,items,estimated_total,currency,status,created_at").order("created_at", { ascending: false }).limit(25);
+    const { data, error } = await supabaseClient.from("orders").select("id,order_number,items,estimated_total,currency,status,created_at,order_status_events(status,created_at)").order("created_at", { ascending: false }).limit(25);
     if (error) { status.textContent = "We couldn’t load your order history. Please try again."; return; }
     status.textContent = "";
     if (!data.length) { history.innerHTML = '<p class="account-empty">No order requests yet. Your requests will appear here.</p>'; return; }
+    const stages = ["New", "Confirmed", "Preparing", "In Transit", "Delivered"];
+    const normalized = value => String(value || "New").trim().toLowerCase().replace(/[ _-]+/g, " ");
+    const formatStamp = value => value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
     history.innerHTML = data.map(order => {
       const date = new Date(order.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-      const items = (Array.isArray(order.items) ? order.items : []).map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}`).join(" · ");
-      return `<article class="order-card"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(order.status || "New")}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${items}</p></article>`;
+      const lineItems = Array.isArray(order.items) ? order.items : [];
+      const summary = lineItems.map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}`).join(" · ");
+      const current = String(order.status || "New").trim();
+      const currentIndex = stages.findIndex(stage => normalized(stage) === normalized(current));
+      const events = Array.isArray(order.order_status_events) ? order.order_status_events : [];
+      const timeline = normalized(current) === "cancelled"
+        ? `<div class="order-cancelled"><strong>Order cancelled</strong><span>${escapeHtml(formatStamp(events.find(event => normalized(event.status) === "cancelled")?.created_at) || "Contact us if you have questions.")}</span></div>`
+        : `<ol class="order-progress" aria-label="Order progress">${stages.map((stage, index) => {
+          const event = events.find(entry => normalized(entry.status) === normalized(stage));
+          const done = currentIndex >= 0 && index <= currentIndex;
+          const when = event ? formatStamp(event.created_at) : "";
+          return `<li class="${done ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><span class="progress-dot" aria-hidden="true"></span><span class="progress-copy"><strong>${escapeHtml(stage === "New" ? "Request received" : stage)}</strong>${when ? `<time>${escapeHtml(when)}</time>` : ""}</span></li>`;
+        }).join("")}</ol>`;
+      const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
+      const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
+      return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">View order tracking <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p></div></details>`;
     }).join("");
   }
   function setAuthMode(mode) {
@@ -222,6 +239,7 @@
   }
   $("#account-open").addEventListener("click", openAccount);
   $("#account-close").addEventListener("click", closeAccount);
+  $("#orders-refresh").addEventListener("click", loadOrderHistory);
   accountBackdrop.addEventListener("click", e => { if (e.target === accountBackdrop) closeAccount(); });
   $("#account-switch-copy").addEventListener("click", e => { if (e.target.id === "account-switch") setAuthMode($("#account-form").dataset.mode === "signup" ? "signin" : "signup"); });
   $("#account-form").addEventListener("submit", async e => {

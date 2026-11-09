@@ -5,6 +5,9 @@
  */
 const SHEET_NAME = "Trikonic Orders";
 const CATALOG_SHEET_NAME = "Website Catalog";
+const STATUS_SYNC_URL = "https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync";
+const STATUS_SYNC_PROPERTY = "TRIKONIC_STATUS_SYNC_TOKEN";
+const ORDER_STATUSES = ["New", "Confirmed", "Preparing", "In Transit", "Delivered", "Cancelled"];
 
 function doGet(e) {
   // Only expose published catalog fields plus name/category/price from the inventory tab.
@@ -87,6 +90,66 @@ function setupTrikonicOrdersSheet() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = spreadsheet.getSheetByName(SHEET_NAME) || spreadsheet.insertSheet(SHEET_NAME);
   ensureOrderHeaders(sheet);
+  const statusRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(ORDER_STATUSES, true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange(2, 10, Math.max(sheet.getMaxRows() - 1, 1), 1).setDataValidation(statusRule);
+}
+
+// Run once after setting TRIKONIC_STATUS_SYNC_TOKEN in Project Settings > Script properties.
+function setupOrderStatusSync() {
+  const token = PropertiesService.getScriptProperties().getProperty(STATUS_SYNC_PROPERTY);
+  if (!token) throw new Error(`Add ${STATUS_SYNC_PROPERTY} in Project Settings > Script properties before running setupOrderStatusSync.`);
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(SHEET_NAME);
+  if (!sheet) throw new Error(`Sheet "${SHEET_NAME}" was not found. Run setupTrikonicOrdersSheet first.`);
+  ensureOrderHeaders(sheet);
+  ScriptApp.getProjectTriggers()
+    .filter(trigger => trigger.getHandlerFunction() === "syncTrikonicOrderStatusOnEdit")
+    .forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  ScriptApp.newTrigger("syncTrikonicOrderStatusOnEdit")
+    .forSpreadsheet(spreadsheet)
+    .onEdit()
+    .create();
+}
+
+// An installable onEdit trigger sends only the order number and status, never customer data.
+function syncTrikonicOrderStatusOnEdit(event) {
+  if (!event || !event.range) return;
+  const range = event.range;
+  const sheet = range.getSheet();
+  if (sheet.getName() !== SHEET_NAME || range.getRow() < 2 || range.getColumn() !== 10) return;
+
+  const orderNumber = String(sheet.getRange(range.getRow(), 3).getDisplayValue() || "").trim();
+  const status = String(range.getDisplayValue() || "").trim();
+  if (!orderNumber || !ORDER_STATUSES.includes(status)) return;
+
+  const token = PropertiesService.getScriptProperties().getProperty(STATUS_SYNC_PROPERTY);
+  if (!token) {
+    range.setNote(`Status was not synced. Add ${STATUS_SYNC_PROPERTY} in Apps Script Project Settings.`);
+    return;
+  }
+
+  try {
+    const response = UrlFetchApp.fetch(STATUS_SYNC_URL, {
+      method: "post",
+      contentType: "application/json",
+      headers: { Authorization: `Bearer ${token}` },
+      payload: JSON.stringify({ orderNumber, status }),
+      muteHttpExceptions: true
+    });
+    const code = response.getResponseCode();
+    if (code < 200 || code >= 300) {
+      range.setNote(`Status sync failed (HTTP ${code}). Check the order number, status, and Supabase status-sync setup.`);
+      console.error(`Order status sync failed with HTTP ${code}: ${response.getContentText()}`);
+      return;
+    }
+    range.setNote(`Synced to customer order tracking on ${new Date().toLocaleString()}.`);
+  } catch (error) {
+    range.setNote("Status sync failed. Check Apps Script execution history and the Supabase status-sync setup.");
+    console.error(error);
+  }
 }
 
 function ensureOrderHeaders(sheet) {

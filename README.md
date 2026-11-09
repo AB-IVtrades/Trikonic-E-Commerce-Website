@@ -62,6 +62,21 @@ To connect the order form and product catalog to the existing Sheet:
 
 The Web App must accept requests from website visitors, so its URL is public. Keep only order fields in this spreadsheet, restrict spreadsheet access to your team, and redeploy the Apps Script deployment after changing its code. The website queues each request with a browser POST. Google Apps Script redirects its response, so the browser cannot verify the Sheet write; the customer sees an “on its way” message after the browser queues it. Check the Sheet when you first set this up.
 
+### Update order status from the Sheet
+
+The customer’s **My account → Order history** shows a private tracking timeline. Change the `Status` cell in column J of `Trikonic Orders`; the dropdown offers `New`, `Confirmed`, `Preparing`, `In Transit`, `Delivered`, and `Cancelled`. An installable Apps Script edit trigger sends only that order number and status to the Supabase `order-status-sync` function. Supabase records each change, and the customer can open the order card and refresh to see the latest status. The function validates a shared secret and updates by order number; order reads remain protected by the customer ownership policies.
+
+One-time secure setup:
+
+1. In a terminal, run `openssl rand -hex 32` to make a private shared token. Keep it out of chat and source control.
+2. In **Supabase → Edge Functions → Secrets**, add `ORDER_STATUS_SYNC_TOKEN` with that value. The `order-status-sync` Edge Function is deployed. Its endpoint is `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync`.
+3. In the spreadsheet, open **Extensions → Apps Script → Project Settings → Script properties** and add `TRIKONIC_STATUS_SYNC_TOKEN` with the exact same value.
+4. Replace the Apps Script editor contents with `google-apps-script.gs`, save, then run `setupTrikonicOrdersSheet` and `setupOrderStatusSync` once each. Approve the requested Google permissions. The first function applies the Status dropdown; the second installs the edit trigger.
+5. Choose **Deploy → Manage deployments**, edit the existing Web App, choose **New version**, and deploy. The existing Web App URL stays the same.
+6. Change a test order’s status in column J and confirm the cell note says it synced. Open that customer’s account, click **Refresh**, and expand the order to view its tracking timeline. Avoid using a real customer order for the test.
+
+Keep the shared token only in the Supabase function secret and Apps Script project properties. If it is exposed, replace it in both places. A sheet status edit is the staff control; customers can only read their own order and status history.
+
 ## Deploy on Vercel
 
 1. Create the Git repository when you are ready and put these project files at its root.
