@@ -1,6 +1,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const ALLOWED_STATUSES = new Set(["New", "Confirmed", "Preparing", "In Transit", "Delivered", "Cancelled"]);
+const ALLOWED_STATUSES = new Set([
+  "Order Received",
+  "Payment Made",
+  "Order Placed",
+  "Order Shipped",
+  "Order Arrived in Ghana",
+  "Order Arrived at Warehouse",
+  "Order Ready for Collection",
+  "Order Delivered",
+  "Order Cancelled",
+]);
 
 function safeEqual(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
