@@ -43,7 +43,8 @@ function doGet(e) {
         const isVisible = visible === true || ["true", "yes", "1"].includes(String(visible).trim().toLowerCase());
         const product = inventory.get(String(sku || "").trim());
         if (!isVisible || !product || !image) return;
-        const availability = String(rawAvailability || "in_stock").trim().toLowerCase() === "preorder" ? "preorder" : "in_stock";
+        const availabilityValue = String(rawAvailability || "in_stock").trim().toLowerCase().replace(/[\s_-]/g, "");
+        const availability = availabilityValue === "preorder" ? "preorder" : "in_stock";
         const safeColor = /^#[0-9a-f]{6}$/i.test(String(color).trim()) ? String(color).trim() : "#e8e4dc";
         products.push({
           id: String(sku).trim(), name: product.name, category: product.category,

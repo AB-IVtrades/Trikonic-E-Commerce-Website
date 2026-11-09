@@ -14,7 +14,7 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 
 - `Description`: the text customers see.
 - `Photo URL`: a publicly accessible image URL, or a repository path such as `images/raffia-tote.webp`.
-- `Availability`: enter exactly `in_stock` or `preorder`.
+- `Availability`: choose `In Stock` or `Pre-Order` from the dropdown. The site accepts either capitalization and common variants such as `pre-order`.
 - `Tag` and `Card Color`: optional display styling; card color can be a hex value such as `#e5dcd0`.
 - `Show on website`: enter `TRUE` to publish that row or `FALSE` to hide it.
 
