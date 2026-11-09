@@ -57,11 +57,13 @@ function doGet(e) {
         const rawSalePrice = value("Sale Price (GHS)");
         const salePrice = typeof rawSalePrice === "number" ? rawSalePrice : Number(String(rawSalePrice || "").replace(/[^0-9.-]/g, ""));
         const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
+        const parseOptions = raw => [...new Set(String(raw || "").split(/[,;\n]/).map(option => option.trim()).filter(Boolean))];
         const safeColor = /^#[0-9a-f]{6}$/i.test(String(color).trim()) ? String(color).trim() : "#e8e4dc";
         products.push({
           id: String(sku).trim(), name: product.name, category: product.category,
           price: flashSale ? salePrice : product.price, originalPrice: product.price, flashSale,
           description: String(description || "").trim(), image: String(image).trim(), availability,
+          colors: parseOptions(value("Available Colors")), sizes: parseOptions(value("Available Sizes")),
           tag: String(tag || "").trim(), color: safeColor
         });
       });
@@ -80,7 +82,7 @@ function doPost(e) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME)
       || SpreadsheetApp.getActiveSpreadsheet().insertSheet(SHEET_NAME);
     ensureOrderHeaders(sheet);
-    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
+    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.color ? ` [Color: ${item.color}]` : ""}${item.size ? ` [Size: ${item.size}]` : ""}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
     const receivedAt = new Date();
     sheet.appendRow([
       receivedAt, receivedAt, order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
@@ -95,7 +97,7 @@ function doPost(e) {
   }
 }
 
-// Run once to add flash-sale columns and refresh catalog dropdowns.
+// Run once to add variant/sale columns and refresh catalog dropdowns.
 function setupTrikonicCatalogSheet() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = spreadsheet.getSheetByName(CATALOG_SHEET_NAME) || spreadsheet.insertSheet(CATALOG_SHEET_NAME);
@@ -122,7 +124,7 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)"].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes"].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextColumn).setValue(header);
