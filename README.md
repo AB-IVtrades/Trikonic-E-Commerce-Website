@@ -71,9 +71,10 @@ One-time secure setup:
 1. In a terminal, run `openssl rand -hex 32` to make a private shared token. Keep it out of chat and source control.
 2. In **Supabase → Edge Functions → Secrets**, add `ORDER_STATUS_SYNC_TOKEN` with that value. The `order-status-sync` Edge Function is deployed. Its endpoint is `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync`.
 3. In the spreadsheet, open **Extensions → Apps Script → Project Settings → Script properties** and add `TRIKONIC_STATUS_SYNC_TOKEN` with the exact same value.
-4. Replace the Apps Script editor contents with `google-apps-script.gs`, save, then run `setupTrikonicOrdersSheet` and `setupOrderStatusSync` once each. Approve the requested Google permissions. The first function applies the Status dropdown; the second installs the edit trigger.
-5. Choose **Deploy → Manage deployments**, edit the existing Web App, choose **New version**, and deploy. The existing Web App URL stays the same.
-6. Change a test order’s status in column J and confirm the cell note says it synced. Open that customer’s account, click **Refresh**, and expand the order to view its tracking timeline. Avoid using a real customer order for the test.
+4. Replace the Apps Script editor contents with `google-apps-script.gs` and save. Run `authorizeTrikonicStatusSync` once manually and approve Google's external request permission. This grants the scope that an edit trigger cannot prompt for itself.
+5. Run `setupTrikonicOrdersSheet` and `setupOrderStatusSync` once each. The first function applies the Status dropdown; the second installs the edit trigger.
+6. Choose **Deploy → Manage deployments**, edit the existing Web App, choose **New version**, and deploy. The existing Web App URL stays the same.
+7. Change a test order’s status in column J and confirm the cell note says it synced. Open that customer’s account, click **Refresh**, and expand the order to view its tracking timeline. Avoid using a real customer order for the test.
 
 Keep the shared token only in the Supabase function secret and Apps Script project properties. If it is exposed, replace it in both places. A sheet status edit is the staff control; customers can only read their own order and status history.
 
