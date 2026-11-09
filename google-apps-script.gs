@@ -114,6 +114,15 @@ function setupOrderStatusSync() {
     .create();
 }
 
+// Run once manually to grant this Apps Script project external-request permission.
+// The edit trigger cannot display Google's authorization prompt on its own.
+function authorizeTrikonicStatusSync() {
+  const response = UrlFetchApp.fetch("https://www.google.com/generate_204", {
+    muteHttpExceptions: true
+  });
+  console.log(`External request permission authorized (HTTP ${response.getResponseCode()}).`);
+}
+
 // An installable onEdit trigger sends only the order number and status, never customer data.
 function syncTrikonicOrderStatusOnEdit(event) {
   if (!event || !event.range) return;
