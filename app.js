@@ -204,23 +204,25 @@
     if (error) { status.textContent = "We couldn’t load your order history. Please try again."; return; }
     status.textContent = "";
     if (!data.length) { history.innerHTML = '<p class="account-empty">No order requests yet. Your requests will appear here.</p>'; return; }
-    const stages = ["New", "Confirmed", "Preparing", "In Transit", "Delivered"];
-    const normalized = value => String(value || "New").trim().toLowerCase().replace(/[ _-]+/g, " ");
+    const stages = ["Order Received", "Payment Made", "Order Placed", "Order Shipped", "Order Arrived in Ghana", "Order Arrived at Warehouse", "Order Ready for Collection", "Order Delivered"];
+    const normalized = value => String(value || "Order Received").trim().toLowerCase().replace(/[ _-]+/g, " ");
+    const legacyStatusLabels = { new: "Order Received", confirmed: "Payment Made", preparing: "Order Placed", "in transit": "Order Shipped", delivered: "Order Delivered", cancelled: "Order Cancelled", "order cancelled": "Order Cancelled" };
+    const displayStatus = value => legacyStatusLabels[normalized(value)] || stages.find(stage => normalized(stage) === normalized(value)) || "Order Received";
     const formatStamp = value => value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
     history.innerHTML = data.map(order => {
       const date = new Date(order.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
       const lineItems = Array.isArray(order.items) ? order.items : [];
       const summary = lineItems.map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}`).join(" · ");
-      const current = String(order.status || "New").trim();
+      const current = displayStatus(order.status);
       const currentIndex = stages.findIndex(stage => normalized(stage) === normalized(current));
       const events = Array.isArray(order.order_status_events) ? order.order_status_events : [];
-      const timeline = normalized(current) === "cancelled"
-        ? `<div class="order-cancelled"><strong>Order cancelled</strong><span>${escapeHtml(formatStamp(events.find(event => normalized(event.status) === "cancelled")?.created_at) || "Contact us if you have questions.")}</span></div>`
+      const timeline = normalized(current) === "order cancelled"
+        ? `<div class="order-cancelled"><strong>Order Cancelled</strong><span>${escapeHtml(formatStamp(events.find(event => normalized(displayStatus(event.status)) === "order cancelled")?.created_at) || "Contact us if you have questions.")}</span></div>`
         : `<ol class="order-progress" aria-label="Order progress">${stages.map((stage, index) => {
-          const event = events.find(entry => normalized(entry.status) === normalized(stage));
+          const event = events.find(entry => normalized(displayStatus(entry.status)) === normalized(stage));
           const done = currentIndex >= 0 && index <= currentIndex;
           const when = event ? formatStamp(event.created_at) : "";
-          return `<li class="${done ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><span class="progress-dot" aria-hidden="true"></span><span class="progress-copy"><strong>${escapeHtml(stage === "New" ? "Request received" : stage)}</strong>${when ? `<time>${escapeHtml(when)}</time>` : ""}</span></li>`;
+          return `<li class="${done ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><span class="progress-dot" aria-hidden="true"></span><span class="progress-copy"><strong>${escapeHtml(stage)}</strong>${when ? `<time>${escapeHtml(when)}</time>` : ""}</span></li>`;
         }).join("")}</ol>`;
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
       const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
