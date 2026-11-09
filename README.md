@@ -35,7 +35,7 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 
 Only rows marked `TRUE` with a matching SKU and photo are sent to the storefront. Change prices and product names in the existing blue editable columns of the `Products` tab; update photos, descriptions, availability, and visibility in `Website Catalog`. The website receives these catalog fields only; it does not expose stock quantities, profit, or order data. Refresh the site after edits. Once Vercel is connected to the repository, spreadsheet edits do not require a code edit or GitHub commit.
 
-For photos stored with the website, upload optimized JPG/WebP files to an `images` folder in the repository, then enter that relative path in the sheet. Keep images reasonably small (around 300 KB where practical). The hero and story photos are separate; change those `<img src="...">` values in `index.html` when you have brand photos. `products.js` remains a sample fallback until the sheet catalog is ready.
+For photos stored with the website, upload optimized JPG/WebP files to an `images` folder in the repository, then enter that relative path in the sheet (for example `images/set-of-basic-tops.jpeg`). A bare filename is also treated as an image inside `images/`. Keep images reasonably small (around 300 KB where practical). The hero and story photos are separate; change those `<img src="...">` values in `index.html` when you have brand photos. The storefront waits for the live sheet catalog instead of briefly showing sample products.
 
 The example products and contact details are placeholders. Replace them before launch. Search the project for `hello@trikonic.com` to update the contact address.
 

@@ -1,5 +1,7 @@
 (() => {
-  let products = window.PRODUCTS || [];
+  // The Google Sheet is the catalog source of truth. Never render bundled sample data first.
+  let products = [];
+  let catalogState = "loading";
   const money = n => `GH₵${Number(n).toFixed(2)}`;
   const CART_KEY = "trikonic-cart-v1";
   const supabaseConfig = window.TRikonicSupabaseConfig || {};
@@ -16,6 +18,13 @@
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
   function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify([...cart])); } catch (_) {} }
+  function resolveProductImage(source) {
+    const image = String(source || "").trim();
+    if (!image) return "";
+    if (/^(https?:\/\/|data:|blob:|\/)/i.test(image)) return image;
+    const path = image.replace(/^\.\//, "");
+    return path.includes("/") ? path : `images/${path}`;
+  }
   let savedReceiptOrder = null;
   function renderCheckoutReceipt(target = "#checkout-receipt-items", totalTarget = "#checkout-total") {
     const rows = [...cart.entries()].filter(([, qty]) => qty > 0).map(([id, quantity]) => {
@@ -109,27 +118,36 @@
   }
 
   function renderProducts() {
+    if (catalogState === "loading") { grid.innerHTML = '<p class="catalog-message">Loading the latest finds…</p>'; return; }
+    if (catalogState === "error") { grid.innerHTML = '<p class="catalog-message">We couldn’t load the catalog right now. Please refresh in a moment.</p>'; return; }
+    if (catalogState === "empty") { grid.innerHTML = '<p class="catalog-message">No products are published right now. Please check back soon.</p>'; return; }
     const shown = category === "All finds" ? products : products.filter(p => p.category === category);
-    grid.innerHTML = shown.map(p => { const preorder = p.availability === "preorder"; return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><img src="${escapeAttr(p.image)}" alt="${escapeAttr(p.name)}" loading="lazy"><span class="product-tag">${escapeHtml(p.tag || p.category)}</span><button class="quick-add" data-add="${escapeAttr(p.id)}" aria-label="Add ${escapeAttr(p.name)} to bag">+</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : "in-stock"}">${preorder ? "PRE-ORDER" : "IN STOCK"}</span></div><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p></div><strong>${money(p.price)}</strong></div></article>`; }).join("");
+    if (!shown.length) { grid.innerHTML = '<p class="catalog-message">No products in this category right now.</p>'; return; }
+    grid.innerHTML = shown.map(p => { const preorder = p.availability === "preorder"; return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"><span class="product-tag">${escapeHtml(p.tag || p.category)}</span><button class="quick-add" data-add="${escapeAttr(p.id)}" aria-label="Add ${escapeAttr(p.name)} to bag">+</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : "in-stock"}">${preorder ? "PRE-ORDER" : "IN STOCK"}</span></div><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p></div><strong>${money(p.price)}</strong></div></article>`; }).join("");
   }
   function renderCategories() {
+    if (catalogState === "loading" || catalogState === "error" || catalogState === "empty") { $("#categories").innerHTML = ""; return; }
     const cats = ["All finds", ...new Set(products.map(p => p.category))];
     $("#categories").innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
   }
   function loadProductsFromSheet() {
     const endpoint = window.TRikonicOrderEndpoint || "";
-    if (!endpoint) return;
+    const finishCatalogLoad = () => { renderCategories(); renderProducts(); renderCart(); };
+    if (!endpoint) { catalogState = "error"; finishCatalogLoad(); return; }
     window.receiveTrikonicProducts = catalog => {
-      if (!catalog?.ready || !Array.isArray(catalog.products)) return;
-      products = catalog.products;
-      renderCategories(); renderProducts(); renderCart();
+      if (!catalog || !Array.isArray(catalog.products)) { catalogState = "error"; finishCatalogLoad(); return; }
+      products = catalog.ready ? catalog.products : [];
+      catalogState = products.length ? "ready" : "empty";
+      clearTimeout(catalogLoadTimeout);
+      finishCatalogLoad();
     };
     const script = document.createElement("script");
     const url = new URL(endpoint);
     url.searchParams.set("callback", "receiveTrikonicProducts");
     url.searchParams.set("t", String(Date.now()));
     script.src = url.toString();
-    script.onerror = () => console.warn("Could not load the storefront catalog from Google Sheets.");
+    const catalogLoadTimeout = setTimeout(() => { if (catalogState === "loading") { catalogState = "error"; finishCatalogLoad(); } }, 15000);
+    script.onerror = () => { clearTimeout(catalogLoadTimeout); catalogState = "error"; finishCatalogLoad(); console.warn("Could not load the storefront catalog from Google Sheets."); };
     document.head.appendChild(script);
   }
   function renderCart() {
