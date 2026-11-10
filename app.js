@@ -660,8 +660,63 @@
   }
   renderAccountState(); setAuthMode("signup");
   loadMaintenanceMode();
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); setAccountPopover(false); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); closeContactForm(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
+
+  const contactBackdrop = $("#contact-form-backdrop");
+  function openContactForm() {
+    if (!contactBackdrop) return;
+    $("#contact-form-view").hidden = false;
+    $("#contact-form-success").hidden = true;
+    contactBackdrop.classList.add("show");
+    contactBackdrop.setAttribute("aria-hidden", "false");
+    document.body.classList.add("no-scroll");
+    setTimeout(() => $("#contact-inquiry-form [name='name']")?.focus(), 0);
+  }
+  function closeContactForm() {
+    if (!contactBackdrop) return;
+    contactBackdrop.classList.remove("show");
+    contactBackdrop.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("no-scroll");
+  }
+  if (contactBackdrop) {
+    $("#contact-form-open").addEventListener("click", openContactForm);
+    $("#contact-form-close").addEventListener("click", closeContactForm);
+    $("#contact-form-done").addEventListener("click", closeContactForm);
+    contactBackdrop.addEventListener("click", event => { if (event.target === contactBackdrop) closeContactForm(); });
+    const contactMessage = $("#contact-inquiry-form [name='message']");
+    contactMessage.addEventListener("input", () => { $("#contact-message-count").textContent = `${contactMessage.value.length}/500 characters`; });
+    if (location.hash === "#contact-form") openContactForm();
+    $("#contact-inquiry-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = $("#contact-form-status");
+      const submit = $("#contact-form-submit");
+      if (!supabaseClient) { status.textContent = "We can’t send your message right now. Please email trikonic1011@gmail.com or contact us on WhatsApp."; status.classList.add("account-error"); return; }
+      const values = new FormData(form);
+      submit.disabled = true;
+      submit.innerHTML = "Sending…";
+      status.textContent = "";
+      status.classList.remove("account-error");
+      try {
+        const { error } = await supabaseClient.functions.invoke("contact-message", { body: {
+          name: values.get("name"), email: values.get("email"), phone: values.get("phone"),
+          subject: values.get("subject"), message: values.get("message"), website: values.get("website")
+        } });
+        if (error) throw error;
+        form.reset();
+        $("#contact-message-count").textContent = "0/500 characters";
+        $("#contact-form-view").hidden = true;
+        $("#contact-form-success").hidden = false;
+      } catch (_) {
+        status.textContent = "Your message couldn’t be sent just now. Please try again, or email trikonic1011@gmail.com.";
+        status.classList.add("account-error");
+      } finally {
+        submit.disabled = false;
+        submit.innerHTML = 'Send Message <span>↗</span>';
+      }
+    });
+  }
 
   $("#order-form").addEventListener("submit", async e => {
     e.preventDefault();
