@@ -220,11 +220,12 @@
     $("#subtotal").textContent = money(total); $("#checkout-total").textContent = money(total);
     $("#cart-empty").hidden = count > 0; $("#cart-bottom").hidden = count === 0;
     const hasOutOfStock = entries.some(([key]) => productForCartKey(key)?.availability === "out_of_stock");
-    const hasInvalidOptions = entries.some(([key]) => { const product = productForCartKey(key); return !cartSelectionIsValid(product, parseCartKey(key)); });
-    $("#cart-stock-warning").hidden = !hasOutOfStock && !hasInvalidOptions;
-    $("#cart-stock-warning").textContent = hasOutOfStock ? "Remove out-of-stock items before continuing." : "Some saved colour or size choices are no longer available. Remove those items before continuing.";
-    $("#checkout-open").disabled = hasOutOfStock || hasInvalidOptions;
-    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", invalid = !cartSelectionIsValid(p, selection); const badge = invalid ? "OPTION UNAVAILABLE" : preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = priceMarkup(p, selection); const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${invalid ? "out-of-stock" : preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
+    $("#cart-stock-warning").hidden = !hasOutOfStock;
+    $("#cart-stock-warning").textContent = "Remove out-of-stock items before continuing.";
+    // Saved selections can outlive a catalog refresh. This store submits requests
+    // for manual confirmation, so stale variant labels must not block checkout.
+    $("#checkout-open").disabled = hasOutOfStock;
+    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", badge = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = priceMarkup(p, selection); const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
     renderCheckoutReceipt();
   }
   function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
@@ -500,8 +501,9 @@
     const updatePassword = mode === "update-password";
     const signIn = mode === "signin";
     if (!updatePassword) passwordRecoveryMode = false;
-    $("#account-name-field").hidden = !signup;
+    const nameField = $("#account-name-field");
     const passwordField = $("#account-password-field");
+    if (nameField) nameField.hidden = !signup;
     if (passwordField) passwordField.hidden = recovery;
     const passwordInput = $("#account-form [name=password]");
     passwordInput.required = !recovery;
@@ -639,7 +641,6 @@
     const form = new FormData(e.currentTarget);
     const items = [...cart.entries()].filter(([, quantity]) => quantity > 0).map(([key, quantity]) => { const p = productForCartKey(key), selection = parseCartKey(key), pricing = p && priceFor(p, selection); return p ? { id: p.id, name: p.name, color: selection.color, size: selection.size, availability: p.availability, flashSale: pricing.onSale, quantity, unitPrice: pricing.current, originalUnitPrice: pricing.regular, lineTotal: pricing.current * quantity } : null; }).filter(Boolean);
     if (items.some(item => item.availability === "out_of_stock")) { status.textContent = "Your bag contains an out-of-stock item. Remove it before sending your order."; return; }
-    if ([...cart.entries()].some(([key]) => !cartSelectionIsValid(productForCartKey(key), parseCartKey(key)))) { status.textContent = "A colour or size in your bag is no longer available. Remove that item and choose an available option."; return; }
     const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
     const endpoint = window.TRikonicOrderEndpoint || "";
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
