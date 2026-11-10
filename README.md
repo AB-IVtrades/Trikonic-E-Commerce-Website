@@ -88,6 +88,12 @@ One-time secure setup:
 
 Keep the shared token only in the Supabase function secret and Apps Script project properties. If it is exposed, replace it in both places. A sheet status edit is the staff control; customers can only read their own order and status history.
 
+### Customer order cancellation
+
+Customers can cancel an order from its expanded card in **My account → Order history** while its status is `Order Received`, `Payment Made`, or `Order Placed`. The cancellation endpoint verifies the signed-in user owns that order, then rechecks the spreadsheet status under a script lock before setting it to `Order Cancelled`. The sheet's existing edit trigger syncs the status and tracking event back to Supabase. Once the status reaches `Order Shipped` or later, the customer cancellation button is hidden and the endpoint rejects cancellation even if called directly.
+
+The `customer-cancel-order` Edge Function requires a signed-in Supabase JWT and uses the existing `ORDER_STATUS_SYNC_TOKEN` secret to authenticate its request to Apps Script. The same value must remain in Apps Script project properties as `TRIKONIC_STATUS_SYNC_TOKEN`. After updating `google-apps-script.gs`, save it and redeploy the Web App as a **New version**. The existing `TRikonicOrderEndpoint` in `config.js` is passed to the function; it is a public Apps Script URL, while the shared token remains server-side.
+
 ## Deploy on Vercel
 
 1. Create the Git repository when you are ready and put these project files at its root.
