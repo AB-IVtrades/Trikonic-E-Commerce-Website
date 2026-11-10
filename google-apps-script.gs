@@ -57,7 +57,7 @@ function doGet(e) {
         const rawSalePrice = value("Sale Price (GHS)");
         const salePrice = typeof rawSalePrice === "number" ? rawSalePrice : Number(String(rawSalePrice || "").replace(/[^0-9.-]/g, ""));
         const parseOptions = raw => [...new Set(String(raw || "").split(/[,;\n]/).map(option => option.trim()).filter(Boolean))];
-        const variantPrices = String(value("Variant Prices (GHS)") || "").split(/[;\n]/).map(entry => {
+        const variantPrices = String(value("Variant Prices (GHS)") || "").split(/[;,\n]/).map(entry => {
           const separator = entry.lastIndexOf(":");
           if (separator < 0) return null;
           const options = entry.slice(0, separator).split("|").map(option => option.trim());
