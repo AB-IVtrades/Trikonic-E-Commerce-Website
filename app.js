@@ -501,15 +501,17 @@
     const signIn = mode === "signin";
     if (!updatePassword) passwordRecoveryMode = false;
     $("#account-name-field").hidden = !signup;
-    $("#account-password-field").hidden = recovery;
+    const passwordField = $("#account-password-field");
+    if (passwordField) passwordField.hidden = recovery;
     const passwordInput = $("#account-form [name=password]");
     passwordInput.required = !recovery;
     passwordInput.autocomplete = updatePassword ? "new-password" : "current-password";
-    $("#account-password-field").firstChild.textContent = updatePassword ? "New password" : "Password";
+    if (passwordField?.firstChild) passwordField.firstChild.textContent = updatePassword ? "New password" : "Password";
     $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : recovery ? "Reset your <em>password.</em>" : updatePassword ? "Choose a <em>new password.</em>" : "Welcome to <em>Trikonic.</em>";
     $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here." : recovery ? "We’ll email you a secure link to reset your password." : updatePassword ? "Choose a new password for your Trikonic account." : "Sign in to place order requests and keep track of them here.";
     $("#account-submit").innerHTML = signup ? "Create account <span>↗</span>" : recovery ? "Send reset link <span>↗</span>" : updatePassword ? "Update password <span>↗</span>" : "Sign in <span>↗</span>";
-    $("#account-recovery-actions").hidden = !signIn;
+    const recoveryActions = $("#account-recovery-actions");
+    if (recoveryActions) recoveryActions.hidden = !signIn;
     $("#account-switch-copy").innerHTML = signup ? 'Already have an account? <button type="button" id="account-switch">Sign in</button>' : signIn ? 'New here? <button type="button" id="account-switch">Create an account</button>' : '<button type="button" id="account-switch">Back to sign in</button>';
     $("#account-form").dataset.mode = mode;
     $("#account-status").textContent = "";
@@ -536,7 +538,7 @@
     const mode = $("#account-form").dataset.mode;
     setAuthMode(mode === "signup" ? "signin" : mode === "signin" ? "signup" : "signin");
   });
-  $("#account-forgot-password").addEventListener("click", () => setAuthMode("recover"));
+  $("#account-forgot-password")?.addEventListener("click", () => setAuthMode("recover"));
   async function sendAccountEmail(kind) {
     const status = $("#account-status");
     const button = kind === "recovery" ? $("#account-submit") : $("#account-resend-confirmation");
@@ -558,7 +560,7 @@
       status.classList.add("account-error");
     } finally { button.disabled = false; }
   }
-  $("#account-resend-confirmation").addEventListener("click", () => sendAccountEmail("confirmation"));
+  $("#account-resend-confirmation")?.addEventListener("click", () => sendAccountEmail("confirmation"));
   $("#account-form").addEventListener("submit", async e => {
     e.preventDefault();
     const status = $("#account-status");
