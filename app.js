@@ -541,7 +541,7 @@
     passwordInput.autocomplete = updatePassword ? "new-password" : "current-password";
     if (passwordField?.firstChild) passwordField.firstChild.textContent = updatePassword ? "New password" : "Password";
     $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : recovery ? "Reset your <em>password.</em>" : updatePassword ? "Choose a <em>new password.</em>" : "Welcome to <em>Trikonic.</em>";
-    $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here." : recovery ? "We’ll email you a secure link to reset your password." : updatePassword ? "Choose a new password for your Trikonic account." : "Sign in to place order requests and keep track of them here.";
+    $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here. If you’ve registered this email before, sign in or use Forgot password? instead." : recovery ? "We’ll email you a secure link to reset your password." : updatePassword ? "Choose a new password for your Trikonic account." : "Sign in to place order requests and keep track of them here.";
     $("#account-submit").innerHTML = signup ? "Create account <span>↗</span>" : recovery ? "Send reset link <span>↗</span>" : updatePassword ? "Update password <span>↗</span>" : "Sign in <span>↗</span>";
     const recoveryActions = $("#account-recovery-actions");
     if (recoveryActions) recoveryActions.hidden = !signIn;
@@ -631,6 +631,7 @@
     } catch (error) {
       status.textContent = error.message || "We couldn’t complete that. Please check your details and try again.";
       if (mode === "signin" && /invalid login credentials/i.test(status.textContent)) status.textContent = "Email or password didn’t match. Check your details, or use Forgot password? to reset it.";
+      if (mode === "signup" && /already (?:been )?registered|already exists|user_exists|user_already_exists/i.test(`${error.code || ""} ${error.message || ""}`)) status.textContent = "This email may already have an account. Sign in or use Forgot password? to get back in.";
       status.classList.add("account-error");
     } finally { submit.disabled = false; }
   });
