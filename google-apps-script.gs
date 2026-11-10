@@ -58,11 +58,16 @@ function doGet(e) {
         const salePrice = typeof rawSalePrice === "number" ? rawSalePrice : Number(String(rawSalePrice || "").replace(/[^0-9.-]/g, ""));
         const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
         const parseOptions = raw => [...new Set(String(raw || "").split(/[,;\n]/).map(option => option.trim()).filter(Boolean))];
+        const photos = [...new Set([image, ...String(value("Additional Photos") || "").split(/[;\n]/)].map(photo => String(photo || "").trim()).filter(Boolean))];
+        const specs = String(value("Product Specs") || "").split(/[;\n]/).map(line => {
+          const separator = line.indexOf(":");
+          return separator > 0 ? { name: line.slice(0, separator).trim(), value: line.slice(separator + 1).trim() } : null;
+        }).filter(spec => spec && spec.name && spec.value);
         const safeColor = /^#[0-9a-f]{6}$/i.test(String(color).trim()) ? String(color).trim() : "#e8e4dc";
         products.push({
           id: String(sku).trim(), name: product.name, category: product.category,
           price: flashSale ? salePrice : product.price, originalPrice: product.price, flashSale,
-          description: String(description || "").trim(), image: String(image).trim(), availability,
+          description: String(description || "").trim(), image: String(image).trim(), images: photos, specs, availability,
           colors: parseOptions(value("Available Colors")), sizes: parseOptions(value("Available Sizes")),
           tag: String(tag || "").trim(), color: safeColor
         });
@@ -164,7 +169,7 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes"].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Additional Photos", "Product Specs"].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextColumn).setValue(header);
