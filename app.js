@@ -384,9 +384,8 @@
   const closeModal = () => { $("#modal-backdrop").classList.remove("show"); document.body.classList.remove("no-scroll"); };
   $("#checkout-close").addEventListener("click", closeModal); $("#modal-backdrop").addEventListener("click", e => { if (e.target.id === "modal-backdrop") closeModal(); });
   $("#receipt-download").addEventListener("click", () => { if (savedReceiptOrder) downloadReceiptPdf(savedReceiptOrder); });
-  // This payment handoff is only present on the payment-enabled checkout page.
-  // Other routes use the order-request receipt, so don't let the missing button
-  // abort shared startup (auth handlers and the Google Sheets catalog loader).
+  // Every storefront route uses the payment-enabled checkout. Keep this guard
+  // so shared startup remains resilient if a page is intentionally simplified.
   async function startPaystackPayment() {
     if (!savedReceiptOrder || !supabaseClient) return false;
     const button = $("#pay-order-now"), status = $("#payment-start-status");
