@@ -122,9 +122,8 @@
       write(`${item.quantity} x ${item.name}${options ? ` (${options})` : ""}${availability}${sale} - GHS ${(Number(item.lineTotal) || 0).toFixed(2)}`, 10, 8);
     });
     rule();
-    write(`Estimated item subtotal: GHS ${Number(order.estimatedTotal).toFixed(2)}`, 12);
-    write("Shipping fee is paid by the customer separately.");
-    write("Shipping amount will be confirmed and is not included above.");
+    write(`Order total (shipping included): GHS ${Number(order.estimatedTotal).toFixed(2)}`, 12);
+    write("Shipping is included in the displayed product prices and order total.");
     rule();
     write("Order summary. Payment must be confirmed separately by Paystack.", 9);
 
@@ -212,6 +211,25 @@
     script.onerror = () => { clearTimeout(catalogLoadTimeout); catalogState = "error"; finishCatalogLoad(); console.warn("Could not load the storefront catalog from Google Sheets."); };
     document.head.appendChild(script);
   }
+  const mobileNav = $("#mobile-sidebar");
+  const mobileNavBackdrop = $("#mobile-nav-backdrop");
+  function setMobileNav(open) {
+    if (!mobileNav || !mobileNavBackdrop) return;
+    mobileNav.classList.toggle("open", open);
+    mobileNav.setAttribute("aria-hidden", String(!open));
+    mobileNavBackdrop.hidden = !open;
+    $("#mobile-menu-open")?.setAttribute("aria-expanded", String(open));
+    document.body.classList.toggle("mobile-nav-open", open);
+  }
+  $("#mobile-menu-open")?.addEventListener("click", () => setMobileNav(true));
+  $("#mobile-menu-close")?.addEventListener("click", () => setMobileNav(false));
+  mobileNavBackdrop?.addEventListener("click", () => setMobileNav(false));
+  mobileNav?.querySelectorAll("a").forEach(link => {
+    const currentPage = location.pathname.split("/").pop() || "index.html";
+    if (link.getAttribute("href") === currentPage) link.setAttribute("aria-current", "page");
+    link.addEventListener("click", () => setMobileNav(false));
+  });
+  $("#mobile-account-open")?.addEventListener("click", () => { setMobileNav(false); openAccount(signedInUser ? "signin" : "signup"); });
   function renderCart() {
     const entries = [...cart.entries()].filter(([key, qty]) => qty > 0 && productForCartKey(key));
     const count = entries.reduce((s, [, q]) => s + q, 0);
@@ -392,7 +410,10 @@
   function renderMaintenanceMode() {
     const isAdmin = isStoreAdmin();
     const screen = $("#maintenance-screen");
-    screen.hidden = maintenanceLoaded && (!maintenanceMode || isAdmin);
+    // Never show the outage screen while the setting is still being checked.
+    // The page starts with this screen hidden, so keep it that way until the
+    // authoritative setting has loaded.
+    screen.hidden = !maintenanceLoaded || !maintenanceMode || isAdmin;
     document.body.classList.toggle("maintenance-active", maintenanceMode && !isAdmin);
     $("#admin-maintenance-control").hidden = !isAdmin;
     $("#maintenance-status").textContent = !maintenanceLoaded ? "Checking storefront status…" : maintenanceMode ? "Maintenance mode is on. Shoppers see the maintenance page." : "Maintenance mode is off. The storefront is open.";
@@ -469,7 +490,7 @@
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
       const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
       const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && current !== "Order Cancelled";
-      const paymentLine = order.payment_status === "paid" ? '<p class="order-payment-state paid">Payment confirmed</p>' : unpaid ? `<p class="order-payment-state">Payment pending · Shipping is paid separately</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
+      const paymentLine = order.payment_status === "paid" ? '<p class="order-payment-state paid">Payment confirmed</p>' : unpaid ? `<p class="order-payment-state">Payment pending · Shipping included</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
       return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">View order tracking <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
     }).join("");
   }
@@ -628,7 +649,7 @@
         openAccount("update-password");
       }
       renderAccountState();
-      setTimeout(loadMaintenanceMode, 0);
+      renderMaintenanceMode();
       if (signedInUser) setTimeout(loadOrderHistory, 0);
       if (signedInUser && resumeCheckoutAfterAuth) {
         resumeCheckoutAfterAuth = false;
@@ -639,7 +660,7 @@
   }
   renderAccountState(); setAuthMode("signup");
   loadMaintenanceMode();
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); setAccountPopover(false); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
 
   $("#order-form").addEventListener("submit", async e => {
@@ -685,5 +706,8 @@
     } catch (err) { status.textContent = err.message || "We couldn’t save that just now. Please try again."; }
     finally { submit.disabled = false; submit.innerHTML = 'Continue to payment <span>↗</span>'; }
   });
-  renderCategories(); renderProducts(); renderCart(); loadProductsFromSheet();
+  renderCategories(); renderProducts(); renderCart();
+  // Informational pages keep the shared app shell for account/cart controls, but
+  // don't need a catalog request. Avoid an Apps Script round trip on those pages.
+  if (grid && !grid.closest(".runtime-catalog")) loadProductsFromSheet();
 })();

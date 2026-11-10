@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json", "Idempotency-Key": `paid-order-${order.order_number}` },
       body: JSON.stringify({
         from, to: [order.customer_email], subject: `Payment received · ${order.order_number}`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123451"><p style="letter-spacing:.12em;color:#07805e">TRIKONIC IMPORTS</p><h1>Payment received</h1><p>We’ve confirmed your payment for order <strong>${escapeHtml(order.order_number)}</strong>.</p><p>Amount paid: <strong>GH₵${Number(order.estimated_total).toFixed(2)}</strong></p><p>You can track the order from <a href="https://trikonicimports.com/#home">your Trikonic account</a>. Shipping is paid separately and will be confirmed with you.</p></div>`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123451"><p style="letter-spacing:.12em;color:#07805e">TRIKONIC IMPORTS</p><h1>Payment received</h1><p>We’ve confirmed your payment for order <strong>${escapeHtml(order.order_number)}</strong>.</p><p>Amount paid: <strong>GH₵${Number(order.estimated_total).toFixed(2)}</strong></p><p>You can track the order from <a href="https://trikonicimports.com/#home">your Trikonic account</a>. Shipping is included in the amount paid.</p></div>`,
       }),
     });
     if (!email.ok) { console.error("Resend notification failed", await email.text()); return reply({ error: "Payment saved; email notification will retry" }, 503); }
@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
     const sms = await fetch("https://sms.hubtel.com/v1/messages/send", {
       method: "POST",
       headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ From: senderId, To: phone, Content: `Trikonic: payment received for ${order.order_number}. Track it in your account. Shipping is paid separately.` }),
+      body: JSON.stringify({ From: senderId, To: phone, Content: `Trikonic: payment received for ${order.order_number}. Track it in your account. Shipping is included in the amount paid.` }),
     });
     const result = await sms.json().catch(() => ({}));
     if (!sms.ok || Number(result.status) !== 0) { console.error("Hubtel SMS notification failed", result); return reply({ error: "Payment saved; SMS notification will retry" }, 503); }

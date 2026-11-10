@@ -5,6 +5,7 @@
  */
 const SHEET_NAME = "Trikonic Orders";
 const CATALOG_SHEET_NAME = "Website Catalog";
+const SPREADSHEET_ID = "1LDHrm-o9rVYudKTlaA8Jot8F3cMN2Wl1d3hiz7ohvVc";
 const STATUS_SYNC_URL = "https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync";
 const STATUS_SYNC_PROPERTY = "TRIKONIC_STATUS_SYNC_TOKEN";
 const ORDER_STATUSES = ["Order Received", "Payment Made", "Order Placed", "Order Shipped", "Order Arrived in Ghana", "Order Arrived at Warehouse", "Order Ready for Collection", "Order Delivered", "Order Cancelled"];
@@ -12,11 +13,11 @@ const ORDER_STATUSES = ["Order Received", "Payment Made", "Order Placed", "Order
 function doGet(e) {
   // Only expose published catalog fields plus name/category/price from the inventory tab.
   // Inventory quantities, profit, customers, and orders are never returned.
-  if (e.parameter.callback !== "receiveTrikonicProducts") {
+  if (!e || !e.parameter || e.parameter.callback !== "receiveTrikonicProducts") {
     return ContentService.createTextOutput("Not found").setMimeType(ContentService.MimeType.TEXT);
   }
   try {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const spreadsheet = getTrikonicSpreadsheet_();
     const catalogSheet = spreadsheet.getSheetByName(CATALOG_SHEET_NAME);
     const inventorySheet = spreadsheet.getSheetByName("Products");
     const products = [];
@@ -97,14 +98,20 @@ function doGet(e) {
   }
 }
 
+// This Apps Script is deployed as a standalone web app, so it must open the
+// known spreadsheet explicitly instead of relying on an active spreadsheet.
+function getTrikonicSpreadsheet_() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
     if (payload.action === "cancelOrder") return cancelOrderInSheet(payload);
     if (payload.action === "paymentMade") return markPaymentMadeInSheet(payload);
     const order = payload;
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME)
-      || SpreadsheetApp.getActiveSpreadsheet().insertSheet(SHEET_NAME);
+    const sheet = getTrikonicSpreadsheet_().getSheetByName(SHEET_NAME)
+      || getTrikonicSpreadsheet_().insertSheet(SHEET_NAME);
     ensureOrderHeaders(sheet);
     const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.color ? ` [Color: ${item.color}]` : ""}${item.size ? ` [Size: ${item.size}]` : ""}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
     const receivedAt = new Date();
@@ -134,7 +141,7 @@ function markPaymentMadeInSheet(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const sheet = getTrikonicSpreadsheet_().getSheetByName(SHEET_NAME);
     if (!sheet || sheet.getLastRow() < 2) throw new Error("Order not found");
     ensureOrderHeaders(sheet);
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0].map(value => String(value).trim().toLowerCase());
@@ -166,7 +173,7 @@ function cancelOrderInSheet(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const sheet = getTrikonicSpreadsheet_().getSheetByName(SHEET_NAME);
     if (!sheet || sheet.getLastRow() < 2) throw new Error("Order not found");
     ensureOrderHeaders(sheet);
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0].map(value => String(value).trim().toLowerCase());
@@ -193,7 +200,7 @@ function cancelOrderInSheet(payload) {
 
 // Run once to add variant/sale columns and refresh catalog dropdowns.
 function setupTrikonicCatalogSheet() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getTrikonicSpreadsheet_();
   const sheet = spreadsheet.getSheetByName(CATALOG_SHEET_NAME) || spreadsheet.insertSheet(CATALOG_SHEET_NAME);
   ensureCatalogHeaders(sheet);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(value => String(value).trim().toLowerCase());
@@ -237,7 +244,7 @@ function ensureCatalogHeaders(sheet) {
 
 // Run once from the Apps Script editor to add/backfill the date and time columns now.
 function setupTrikonicOrdersSheet() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getTrikonicSpreadsheet_();
   const sheet = spreadsheet.getSheetByName(SHEET_NAME) || spreadsheet.insertSheet(SHEET_NAME);
   ensureOrderHeaders(sheet);
   const statusRule = SpreadsheetApp.newDataValidation()
@@ -251,7 +258,7 @@ function setupTrikonicOrdersSheet() {
 function setupOrderStatusSync() {
   const token = PropertiesService.getScriptProperties().getProperty(STATUS_SYNC_PROPERTY);
   if (!token) throw new Error(`Add ${STATUS_SYNC_PROPERTY} in Project Settings > Script properties before running setupOrderStatusSync.`);
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getTrikonicSpreadsheet_();
   const sheet = spreadsheet.getSheetByName(SHEET_NAME);
   if (!sheet) throw new Error(`Sheet "${SHEET_NAME}" was not found. Run setupTrikonicOrdersSheet first.`);
   ensureOrderHeaders(sheet);
