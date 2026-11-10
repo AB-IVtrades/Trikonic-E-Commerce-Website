@@ -202,3 +202,7 @@ body.mobile-nav-open{overflow:hidden}
   .detail-purchase>p{margin:6px 0}
   .detail-purchase-note{gap:3px;margin-top:9px;padding:9px}
 }
+
+/* Trikonic palette update: blue wordmark accent and import-route logo mark. */
+.site-header .brand-light{color:#159bd0}
+.brand-mark{flex:0 0 auto}
