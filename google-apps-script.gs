@@ -78,7 +78,9 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const order = JSON.parse(e.postData.contents);
+    const payload = JSON.parse(e.postData.contents);
+    if (payload.action === "cancelOrder") return cancelOrderInSheet(payload);
+    const order = payload;
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME)
       || SpreadsheetApp.getActiveSpreadsheet().insertSheet(SHEET_NAME);
     ensureOrderHeaders(sheet);
@@ -94,6 +96,44 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(error) })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Called by the authenticated customer-cancel-order Edge Function only.
+function cancelOrderInSheet(payload) {
+  const token = PropertiesService.getScriptProperties().getProperty(STATUS_SYNC_PROPERTY) || "";
+  if (!token || !payload.token || payload.token !== token) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: "Unauthorized" })).setMimeType(ContentService.MimeType.JSON);
+  }
+  const orderNumber = String(payload.orderNumber || "").trim();
+  if (!/^TRK-[0-9]{13}-[A-Z0-9]{4}$/.test(orderNumber)) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: "Invalid order number" })).setMimeType(ContentService.MimeType.JSON);
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    if (!sheet || sheet.getLastRow() < 2) throw new Error("Order not found");
+    ensureOrderHeaders(sheet);
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0].map(value => String(value).trim().toLowerCase());
+    const idColumn = headers.indexOf("order id") + 1;
+    const statusColumn = headers.indexOf("status") + 1;
+    if (!idColumn || !statusColumn) throw new Error("Order sheet headers are missing");
+    const ids = sheet.getRange(2, idColumn, sheet.getLastRow() - 1, 1).getDisplayValues().flat();
+    const index = ids.findIndex(value => String(value).trim() === orderNumber);
+    if (index < 0) throw new Error("Order not found in the order sheet");
+    const row = index + 2;
+    const currentStatus = String(sheet.getRange(row, statusColumn).getDisplayValue()).trim();
+    if (currentStatus === "Order Cancelled") {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, unchanged: true, status: currentStatus })).setMimeType(ContentService.MimeType.JSON);
+    }
+    if (!["Order Received", "Payment Made", "Order Placed"].includes(currentStatus)) {
+      throw new Error("This order can no longer be cancelled because it has been shipped or completed");
+    }
+    sheet.getRange(row, statusColumn).setValue("Order Cancelled");
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, status: "Order Cancelled" })).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 
