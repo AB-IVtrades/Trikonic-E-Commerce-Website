@@ -147,3 +147,26 @@ body.mobile-nav-open{overflow:hidden}
 .shop-section .section-heading .home-section-link{margin-bottom:8px}
 @media(max-width:900px){.home-category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.home-categories{padding:42px 5%}.home-section-heading{align-items:flex-start;flex-direction:column;gap:14px;margin-bottom:18px}.home-section-heading h2{font-size:29px}.home-category-grid{gap:10px}.home-category-card{min-height:132px;padding:15px;border-radius:10px}.home-category-card strong{font-size:17px}.shop-section .section-heading{align-items:flex-start;gap:14px;flex-direction:column}.shop-section .section-heading h2{font-size:31px}.shop-section .section-heading .home-section-link{margin:0}}
+
+/* Keep page layouts within the viewport on phones while preserving intentional
+   horizontal scrolling for category chips and image galleries. */
+@media(max-width:780px){
+  html,body{max-width:100%;overflow-x:clip}
+  .page-main,.page-main *,.site-footer,.site-footer>div,.shop-layout,.category-page-layout,.shop-sidebar,.category-page-sidebar,.shop-results,.results-toolbar,.sort-control,.steps-grid,.steps-grid article,.ordering-notes,.ordering-notes>div,.about-page-layout,.about-copy,.contact-page-cards,.contact-page-card,.team-grid,.team-grid>*{min-width:0}
+  .shop-layout,.category-page-layout{width:100%;max-width:100%}
+  .shop-sidebar,.category-page-sidebar{width:100%;max-width:100%;overflow:hidden}
+  .shop-sidebar .category-list,.category-page-sidebar .category-list{width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;flex-wrap:nowrap}
+  .shop-sidebar .category-list .category-chip,.category-page-sidebar .category-list .category-chip{flex:0 0 auto}
+  .shop-results,.results-toolbar,.sort-control{max-width:100%}
+  .shop-results .product-grid{width:100%;max-width:100%;min-width:0}
+  .shop-results .product-card{min-width:0}
+  .product-photo img,.detail-main-image img,.about-image img,.story-image>img{max-width:100%}
+}
+@media(max-width:650px){
+  .shop-sidebar{display:flex;flex-direction:column;min-height:220px}
+  .shop-price-filter{display:block;margin-top:auto}
+  .shop-sidebar hr,.shop-sidebar label,.shop-sidebar input,.price-range-labels{display:block}
+  .shop-sidebar input[type=range]{max-width:100%}
+  .ordering-trust{width:100%;max-width:100%}
+  .contact-form-modal{max-width:calc(100vw - 24px)}
+}
