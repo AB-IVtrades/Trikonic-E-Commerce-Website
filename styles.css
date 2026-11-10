@@ -65,3 +65,5 @@
 
 .order-payment-state{font-size:11px;color:#c76045;margin:14px 0 8px}.order-payment-state.paid{color:#08795a}.pay-order-button{border:0;background:#08795a;color:#fff;padding:11px 15px;font:600 11px var(--sans);cursor:pointer;margin:0 0 12px}.pay-order-button:disabled{opacity:.65;cursor:wait}
 .account-recovery-actions{display:flex;justify-content:space-between;gap:12px;margin:10px 0 4px}.account-recovery-actions[hidden]{display:none}.account-recovery-actions button{border:0;background:transparent;padding:4px 0;color:#0b426b;text-decoration:underline;cursor:pointer;font:inherit;font-size:10px}.account-recovery-actions button:disabled{opacity:.55;cursor:wait}
+
+.checkout-modal form label[hidden]{display:none}
