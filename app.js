@@ -270,8 +270,36 @@
   function escapeAttr(s) { return escapeHtml(s); }
   const detailBackdrop = $("#product-detail-backdrop");
   let detailProduct = null, detailColor = "", detailSize = "", detailVariant = "";
-  const swatchColors = { black:"#242424", white:"#fffefa", red:"#b52c2c", blue:"#325c9b", navy:"#162c49", "sky blue":"#9bc8df", teal:"#198b8b", green:"#5d8561", sage:"#a8b899", pink:"#e5a3ad", beige:"#d8c4a4", cream:"#eee8d8", brown:"#78513b", grey:"#9b9b98", gray:"#9b9b98", purple:"#8066a1", orange:"#df7c42", yellow:"#e9bf47" };
-  function swatchFor(color) { const value = String(color || "").trim().toLowerCase(); if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value)) return value; const match = Object.keys(swatchColors).sort((a, b) => b.length - a.length).find(name => value === name || value.includes(name)); return match ? swatchColors[match] : "#d8d4ca"; }
+  const swatchColors = {
+    black:"#242424", jet:"#171717", charcoal:"#414141", graphite:"#454545",
+    white:"#fffefa", ivory:"#f5f0e5", "off white":"#f5f0e5", "off-white":"#f5f0e5",
+    cream:"#eee8d8", beige:"#d8c4a4", oatmeal:"#cbbba3", taupe:"#9b897c", khaki:"#b6a77c",
+    tan:"#c49a6c", camel:"#b78354", brown:"#78513b", chocolate:"#54382d",
+    red:"#c83b3b", wine:"#781f3b", whine:"#781f3b", burgundy:"#781f3b", maroon:"#742c3b",
+    pink:"#e5a3ad", blush:"#e8b2b6", "rose gold":"#b76e79", purple:"#8066a1", lavender:"#b7a3d1",
+    blue:"#325c9b", navy:"#162c49", "sky blue":"#9bc8df", teal:"#198b8b", turquoise:"#40b9b3",
+    green:"#4f805c", sage:"#a8b899", olive:"#777b43", orange:"#df7c42", yellow:"#e9bf47",
+    gold:"#c7a547", silver:"#bfc3c7", grey:"#9b9b98", gray:"#9b9b98"
+  };
+  const swatchColorNames = Object.keys(swatchColors).sort((a, b) => b.length - a.length);
+  function normalizeSwatchName(value) {
+    return String(value || "").toLowerCase().replace(/[_-]+/g, " ").replace(/[^a-z0-9#]+/g, " ").trim().replace(/\s+/g, " ");
+  }
+  function swatchFor(color) {
+    const value = String(color || "").trim();
+    if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value)) return value;
+    const normalized = normalizeSwatchName(value);
+    const padded = ` ${normalized} `;
+    const match = swatchColorNames.find(name => padded.includes(` ${normalizeSwatchName(name)} `));
+    return match ? swatchColors[match] : "#d8d4ca";
+  }
+  function swatchMarkFor(color) {
+    const hex = swatchFor(color).slice(1);
+    const full = hex.length === 3 ? hex.split("").map(value => value + value).join("") : hex;
+    const rgb = [0, 2, 4].map(index => parseInt(full.slice(index, index + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+    const luminance = .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+    return luminance < .38 ? "#ffffff" : "#0b2f4d";
+  }
   function renderDetailOptions() {
     if (!detailProduct) return;
     $("#detail-color-group").hidden = !detailProduct.colors?.length;
@@ -280,7 +308,7 @@
     $("#detail-color-label").textContent = detailColor ? `Selected: ${detailColor}` : "Choose a colour";
     $("#detail-size-label").textContent = detailSize ? `Selected: ${detailSize}` : "Choose a size";
     $("#detail-variant-label").textContent = detailVariant ? `Selected: ${detailVariant}` : "Choose an option";
-    $("#detail-colors").innerHTML = (detailProduct.colors || []).map(color => `<button type="button" class="detail-swatch ${color === detailColor ? "selected" : ""}" style="--swatch:${swatchFor(color)}" data-detail-color="${escapeAttr(color)}" aria-label="${escapeAttr(color)}" aria-pressed="${color === detailColor}"><span class="visually-hidden">${escapeHtml(color)}</span></button>`).join("");
+    $("#detail-colors").innerHTML = (detailProduct.colors || []).map(color => `<button type="button" class="detail-swatch ${color === detailColor ? "selected" : ""}" style="--swatch:${swatchFor(color)};--swatch-mark:${swatchMarkFor(color)}" data-detail-color="${escapeAttr(color)}" aria-label="${escapeAttr(color)}" aria-pressed="${color === detailColor}"><span class="visually-hidden">${escapeHtml(color)}</span></button>`).join("");
     $("#detail-sizes").innerHTML = (detailProduct.sizes || []).map(size => `<button type="button" class="detail-size ${size === detailSize ? "selected" : ""}" data-detail-size="${escapeAttr(size)}" aria-pressed="${size === detailSize}">${escapeHtml(size)}</button>`).join("");
     $("#detail-variants").innerHTML = productVariantOptions(detailProduct).map(option => `<button type="button" class="detail-size ${option === detailVariant ? "selected" : ""}" data-detail-variant="${escapeAttr(option)}" aria-pressed="${option === detailVariant}">${escapeHtml(option)}</button>`).join("");
     const missingChoice = Boolean((detailProduct.colors?.length && !detailColor) || (detailProduct.sizes?.length && !detailSize) || (productVariantOptions(detailProduct).length && !detailVariant));
