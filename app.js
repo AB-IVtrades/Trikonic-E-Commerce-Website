@@ -146,7 +146,7 @@
       const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK";
       const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
       const price = p.flashSale ? `<span class="sale-prices"><s>${money(p.originalPrice)}</s><strong>${money(p.price)}</strong></span>` : `<strong>${money(p.price)}</strong>`;
-      return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-add="${escapeAttr(p.id)}" aria-label="${outOfStock ? `${escapeAttr(p.name)} is out of stock` : optionsLabel ? `Choose options for ${escapeAttr(p.name)}` : `Add ${escapeAttr(p.name)} to bag`}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "×" : "+"}</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div>${price}</div></article>`;
+      return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-add="${escapeAttr(p.id)}" aria-label="${outOfStock ? `${escapeAttr(p.name)} is out of stock` : optionsLabel ? `Choose options for ${escapeAttr(p.name)}` : `Add ${escapeAttr(p.name)} to bag`}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "×" : "+"}</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div>${price}</div></article>`;
     }).join("");
   }
   function renderCategories() {
@@ -194,6 +194,62 @@
   function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
+  const detailBackdrop = $("#product-detail-backdrop");
+  let detailProduct = null, detailColor = "", detailSize = "";
+  const swatchColors = { black:"#242424", white:"#fffefa", red:"#b52c2c", blue:"#325c9b", navy:"#162c49", "sky blue":"#9bc8df", teal:"#198b8b", green:"#5d8561", sage:"#a8b899", pink:"#e5a3ad", beige:"#d8c4a4", cream:"#eee8d8", brown:"#78513b", grey:"#9b9b98", gray:"#9b9b98", purple:"#8066a1", orange:"#df7c42", yellow:"#e9bf47" };
+  function swatchFor(color) { const value = String(color || "").trim().toLowerCase(); if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value)) return value; const match = Object.keys(swatchColors).sort((a, b) => b.length - a.length).find(name => value === name || value.includes(name)); return match ? swatchColors[match] : "#d8d4ca"; }
+  function renderDetailOptions() {
+    if (!detailProduct) return;
+    $("#detail-color-group").hidden = !detailProduct.colors?.length;
+    $("#detail-size-group").hidden = !detailProduct.sizes?.length;
+    $("#detail-color-label").textContent = detailColor || "Choose a colour";
+    $("#detail-size-label").textContent = detailSize || "Choose a size";
+    $("#detail-colors").innerHTML = (detailProduct.colors || []).map(color => `<button type="button" class="detail-swatch ${color === detailColor ? "selected" : ""}" style="--swatch:${swatchFor(color)}" data-detail-color="${escapeAttr(color)}" aria-label="${escapeAttr(color)}" aria-pressed="${color === detailColor}"><span class="visually-hidden">${escapeHtml(color)}</span></button>`).join("");
+    $("#detail-sizes").innerHTML = (detailProduct.sizes || []).map(size => `<button type="button" class="detail-size ${size === detailSize ? "selected" : ""}" data-detail-size="${escapeAttr(size)}" aria-pressed="${size === detailSize}">${escapeHtml(size)}</button>`).join("");
+  }
+  function openProductDetail(product) {
+    detailProduct = product;
+    detailColor = product.colors?.[0] || "";
+    detailSize = product.sizes?.[0] || "";
+    const images = [...new Set((product.images?.length ? product.images : [product.image]).filter(Boolean))];
+    const mainImage = images[0] || product.image;
+    $("#detail-main-image").src = resolveProductImage(mainImage);
+    $("#detail-main-image").alt = product.name;
+    $("#detail-thumbnails").innerHTML = images.map((image, index) => `<button type="button" class="detail-thumbnail ${index === 0 ? "active" : ""}" data-detail-image="${escapeAttr(image)}" aria-label="View product image ${index + 1}"><img src="${escapeAttr(resolveProductImage(image))}" alt=""></button>`).join("");
+    $("#detail-category").textContent = product.category || "Trikonic find";
+    $("#detail-name").textContent = product.name;
+    $("#detail-description").textContent = product.description || "Thoughtfully selected and ready to make yours.";
+    const availability = product.availability === "preorder" ? "Available for pre-order" : product.availability === "out_of_stock" ? "Currently out of stock" : "In stock";
+    $("#detail-availability").textContent = availability;
+    $("#detail-availability").className = `detail-availability ${product.availability === "preorder" ? "preorder" : product.availability === "out_of_stock" ? "out-of-stock" : "in-stock"}`;
+    $("#detail-price").innerHTML = product.flashSale ? `<span class="detail-sale-price">${money(product.price)}</span><s>${money(product.originalPrice)}</s><small>FLASH SALE</small>` : `<strong>${money(product.price)}</strong>`;
+    $("#detail-purchase-status").textContent = availability;
+    $("#detail-add").disabled = product.availability === "out_of_stock";
+    $("#detail-add").innerHTML = product.availability === "out_of_stock" ? "Out of stock" : 'Add to bag <span>↗</span>';
+    const specs = Array.isArray(product.specs) ? product.specs : [];
+    $("#detail-specs-table").innerHTML = specs.length ? `<dl>${specs.map(spec => `<div><dt>${escapeHtml(spec.name)}</dt><dd>${escapeHtml(spec.value)}</dd></div>`).join("")}</dl>` : '<p class="detail-no-specs">Product specifications will be added soon.</p>';
+    renderDetailOptions();
+    detailBackdrop.classList.add("show");
+    detailBackdrop.setAttribute("aria-hidden", "false");
+    document.body.classList.add("no-scroll");
+  }
+  function closeProductDetail() {
+    detailBackdrop.classList.remove("show");
+    detailBackdrop.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("no-scroll");
+    detailProduct = null;
+  }
+  $("#detail-close").addEventListener("click", closeProductDetail);
+  detailBackdrop.addEventListener("click", event => { if (event.target === detailBackdrop) closeProductDetail(); });
+  $("#detail-thumbnails").addEventListener("click", event => {
+    const thumbnail = event.target.closest("[data-detail-image]");
+    if (!thumbnail) return;
+    $("#detail-main-image").src = resolveProductImage(thumbnail.dataset.detailImage);
+    $("#detail-thumbnails").querySelectorAll(".detail-thumbnail").forEach(button => button.classList.toggle("active", button === thumbnail));
+  });
+  $("#detail-colors").addEventListener("click", event => { const button = event.target.closest("[data-detail-color]"); if (button) { detailColor = button.dataset.detailColor; renderDetailOptions(); } });
+  $("#detail-sizes").addEventListener("click", event => { const button = event.target.closest("[data-detail-size]"); if (button) { detailSize = button.dataset.detailSize; renderDetailOptions(); } });
+  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock") return; addProductToCart(detailProduct, detailColor, detailSize); closeProductDetail(); setDrawer(true); });
   const variantBackdrop = $("#variant-backdrop");
   let pendingVariantProduct = null;
   function fillVariantSelect(select, values, label) {
@@ -237,6 +293,7 @@
     closeVariantPicker();
   });
   document.addEventListener("click", e => {
+    const detail = e.target.closest("[data-detail]"); if (detail) { const product = products.find(p => p.id === detail.dataset.detail); if (product) openProductDetail(product); return; }
     const add = e.target.closest("[data-add]"); if (add) { const product = products.find(p => p.id === add.dataset.add); if (!product || product.availability === "out_of_stock") return; if (product.colors?.length || product.sizes?.length) openVariantPicker(product); else addProductToCart(product); }
     const filter = e.target.closest("[data-category]"); if (filter) { category = filter.dataset.category; renderCategories(); renderProducts(); }
     const qty = e.target.closest("[data-qty]"); if (qty) { const product = productForCartKey(qty.dataset.qty); if (Number(qty.dataset.delta) > 0 && product?.availability === "out_of_stock") return; cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
@@ -297,6 +354,7 @@
   });
   function openAccount(mode = "signin") { setAuthMode(mode); accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
   function renderAccountState() {
+    $("#account-backdrop .account-modal").classList.toggle("account-auth-mode", !signedInUser);
     $("#account-trigger-label").innerHTML = signedInUser ? "My account<br>Orders" : "Sign in<br>Account";
     $("#account-menu-auth").textContent = signedInUser ? "My account" : "Sign in or create account";
     $("#account-menu-history").innerHTML = signedInUser ? '<span aria-hidden="true">▤</span> Order history' : '<span aria-hidden="true">▤</span> Purchase history';
@@ -384,6 +442,8 @@
   $("#account-open").addEventListener("click", () => setAccountPopover(accountPopover.hidden));
   $("#account-menu-auth").addEventListener("click", () => { setAccountPopover(false); openAccount(signedInUser ? "signin" : "signup"); });
   $("#account-menu-history").addEventListener("click", () => { setAccountPopover(false); openAccount("signin"); });
+  $("#account-side-track").addEventListener("click", event => { document.querySelectorAll(".account-side-link").forEach(link => link.classList.remove("active")); event.currentTarget.classList.add("active"); $("#order-history").scrollIntoView({ block: "nearest" }); });
+  $("#account-side-history").addEventListener("click", event => { document.querySelectorAll(".account-side-link").forEach(link => link.classList.remove("active")); event.currentTarget.classList.add("active"); $("#order-history").scrollIntoView({ block: "nearest" }); });
   document.addEventListener("click", event => { if (!event.target.closest(".account-menu-wrap")) setAccountPopover(false); });
   $("#maintenance-admin-open").addEventListener("click", () => openAccount("signin"));
   $("#account-close").addEventListener("click", closeAccount);
@@ -440,7 +500,7 @@
   }
   renderAccountState(); setAuthMode("signup");
   loadMaintenanceMode();
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); setAccountPopover(false); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
 
   $("#order-form").addEventListener("submit", async e => {
