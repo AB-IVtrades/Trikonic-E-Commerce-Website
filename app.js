@@ -28,8 +28,10 @@
   }
   function cartKey(id, color = "", size = "") { return color || size ? JSON.stringify([String(id), String(color), String(size)]) : String(id); }
   function productForCartKey(key) { const { id } = parseCartKey(key); return products.find(item => item.id === id); }
+  function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
   function cartSelectionIsValid(product, selection) {
-    return Boolean(product && (!product.colors?.length || product.colors.includes(selection.color)) && (!product.sizes?.length || product.sizes.includes(selection.size)));
+    const matches = (options, selected) => !options?.length || options.some(option => normalizeVariantOption(option) === normalizeVariantOption(selected));
+    return Boolean(product && matches(product.colors, selection.color) && matches(product.sizes, selection.size));
   }
   function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify([...cart])); } catch (_) {} }
   function resolveProductImage(source) {
@@ -202,15 +204,19 @@
     if (!detailProduct) return;
     $("#detail-color-group").hidden = !detailProduct.colors?.length;
     $("#detail-size-group").hidden = !detailProduct.sizes?.length;
-    $("#detail-color-label").textContent = detailColor || "Choose a colour";
-    $("#detail-size-label").textContent = detailSize || "Choose a size";
+    $("#detail-color-label").textContent = detailColor ? `Selected: ${detailColor}` : "Choose a colour";
+    $("#detail-size-label").textContent = detailSize ? `Selected: ${detailSize}` : "Choose a size";
     $("#detail-colors").innerHTML = (detailProduct.colors || []).map(color => `<button type="button" class="detail-swatch ${color === detailColor ? "selected" : ""}" style="--swatch:${swatchFor(color)}" data-detail-color="${escapeAttr(color)}" aria-label="${escapeAttr(color)}" aria-pressed="${color === detailColor}"><span class="visually-hidden">${escapeHtml(color)}</span></button>`).join("");
     $("#detail-sizes").innerHTML = (detailProduct.sizes || []).map(size => `<button type="button" class="detail-size ${size === detailSize ? "selected" : ""}" data-detail-size="${escapeAttr(size)}" aria-pressed="${size === detailSize}">${escapeHtml(size)}</button>`).join("");
+    const missingChoice = Boolean((detailProduct.colors?.length && !detailColor) || (detailProduct.sizes?.length && !detailSize));
+    const unavailable = detailProduct.availability === "out_of_stock";
+    $("#detail-add").disabled = unavailable || missingChoice;
+    $("#detail-purchase-status").textContent = unavailable ? "Currently out of stock" : missingChoice ? "Choose the available options to continue." : detailProduct.availability === "preorder" ? "Available for pre-order" : "In stock";
   }
   function openProductDetail(product) {
     detailProduct = product;
-    detailColor = product.colors?.[0] || "";
-    detailSize = product.sizes?.[0] || "";
+    detailColor = "";
+    detailSize = "";
     const images = [...new Set((product.images?.length ? product.images : [product.image]).filter(Boolean))];
     const mainImage = images[0] || product.image;
     $("#detail-main-image").src = resolveProductImage(mainImage);
@@ -249,7 +255,7 @@
   });
   $("#detail-colors").addEventListener("click", event => { const button = event.target.closest("[data-detail-color]"); if (button) { detailColor = button.dataset.detailColor; renderDetailOptions(); } });
   $("#detail-sizes").addEventListener("click", event => { const button = event.target.closest("[data-detail-size]"); if (button) { detailSize = button.dataset.detailSize; renderDetailOptions(); } });
-  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock") return; addProductToCart(detailProduct, detailColor, detailSize); closeProductDetail(); setDrawer(true); });
+  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize })) return; addProductToCart(detailProduct, detailColor, detailSize); closeProductDetail(); setDrawer(true); });
   const variantBackdrop = $("#variant-backdrop");
   let pendingVariantProduct = null;
   function fillVariantSelect(select, values, label) {
