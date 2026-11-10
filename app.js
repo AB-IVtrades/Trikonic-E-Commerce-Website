@@ -369,13 +369,23 @@
   // This payment handoff is only present on the payment-enabled checkout page.
   // Other routes use the order-request receipt, so don't let the missing button
   // abort shared startup (auth handlers and the Google Sheets catalog loader).
-  $("#pay-order-now")?.addEventListener("click", async () => {
-    if (!savedReceiptOrder || !supabaseClient) return;
-    const button = $("#pay-order-now"), status = $("#payment-start-status"); button.disabled = true; button.textContent = "Opening Paystack…"; status.textContent = "";
-    const { data, error } = await supabaseClient.functions.invoke("initialize-paystack-payment", { body: { orderNumber: savedReceiptOrder.orderId } });
-    if (error || !data?.authorizationUrl) { button.disabled = false; button.innerHTML = 'Continue to secure payment <span>↗</span>'; status.textContent = data?.error || error?.message || "Payment could not start. Retry from your order history."; return; }
-    window.location.assign(data.authorizationUrl);
-  });
+  async function startPaystackPayment() {
+    if (!savedReceiptOrder || !supabaseClient) return false;
+    const button = $("#pay-order-now"), status = $("#payment-start-status");
+    if (!button || !status) return false;
+    button.disabled = true; button.textContent = "Opening Paystack…"; status.textContent = "Connecting to secure payment…";
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("initialize-paystack-payment", { body: { orderNumber: savedReceiptOrder.orderId } });
+      if (error || !data?.authorizationUrl) throw new Error(data?.error || error?.message || "Payment could not start.");
+      window.location.assign(data.authorizationUrl);
+      return true;
+    } catch (error) {
+      button.disabled = false; button.innerHTML = 'Continue to secure payment <span>↗</span>';
+      status.textContent = `${error.message || "Payment could not start."} Your order is saved; use the button to retry or pay from your order history.`;
+      return false;
+    }
+  }
+  $("#pay-order-now")?.addEventListener("click", () => startPaystackPayment());
   const accountBackdrop = $("#account-backdrop");
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
   function isStoreAdmin() { return Boolean(signedInUser?.email && adminEmail && signedInUser.email.trim().toLowerCase() === adminEmail); }
@@ -667,10 +677,11 @@
         // cross-origin response. Apps Script still receives it as e.postData.contents.
         sheetQueued = navigator.sendBeacon(endpoint, new Blob([JSON.stringify(order)], { type: "text/plain;charset=utf-8" }));
       }
-      $("#success-message").textContent = sheetQueued ? "Your order is saved. Pay securely to confirm it. We’ll email your tracking number after payment; SMS is sent when notifications are enabled." : "Your order is saved in your account, but the order sheet could not be reached. You can still pay securely and track it in your account.";
+      $("#success-message").textContent = sheetQueued ? "Your order is saved. Opening secure Paystack payment now. We’ll email your tracking number after payment; SMS is sent when notifications are enabled." : "Your order is saved in your account, but the order sheet could not be reached. Opening secure Paystack payment now; you can still track it in your account.";
       $("#checkout-form-view").hidden = true; $("#checkout-success-view").hidden = false;
       cart.clear(); saveCart(); renderCart(); e.currentTarget.reset();
       setTimeout(loadOrderHistory, 0);
+      await startPaystackPayment();
     } catch (err) { status.textContent = err.message || "We couldn’t save that just now. Please try again."; }
     finally { submit.disabled = false; submit.innerHTML = 'Continue to payment <span>↗</span>'; }
   });
