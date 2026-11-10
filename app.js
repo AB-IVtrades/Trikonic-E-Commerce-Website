@@ -619,7 +619,12 @@
         const fullName = String(fields.get("fullName") || "").trim();
         const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: fullName }, emailRedirectTo: window.location.origin } });
         if (error) throw error;
-        if (data.session) { status.textContent = "Account created. You’re signed in."; }
+        // Supabase may return a success-shaped response for an existing email to
+        // avoid account enumeration. An empty identities array marks that case.
+        if (Array.isArray(data.user?.identities) && data.user.identities.length === 0) {
+          status.textContent = "An account already exists with this email. Please sign in or use Forgot password? to access it.";
+          status.classList.add("account-error");
+        } else if (data.session) { status.textContent = "Account created. You’re signed in."; }
         else { status.textContent = "We sent a confirmation link for your Trikonic Imports account. Check your inbox and spam folder to activate it."; }
       } else {
         const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
