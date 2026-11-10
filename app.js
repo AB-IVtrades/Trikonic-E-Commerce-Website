@@ -10,6 +10,7 @@
     : null;
   let signedInUser = null;
   let resumeCheckoutAfterAuth = false;
+  const paymentReturned = new URLSearchParams(location.search).get("payment") === "return";
   const adminEmail = String(window.TRikonicAdminEmail || "").trim().toLowerCase();
   let maintenanceMode = false;
   let maintenanceLoaded = false;
@@ -124,7 +125,7 @@
     write("Shipping fee is paid by the customer separately.");
     write("Shipping amount will be confirmed and is not included above.");
     rule();
-    write("This confirms an order request only. No payment has been taken.", 9);
+    write("Order summary. Payment must be confirmed separately by Paystack.", 9);
 
     const objects = [];
     const setObject = (id, value) => { objects[id] = value; };
@@ -363,6 +364,13 @@
   const closeModal = () => { $("#modal-backdrop").classList.remove("show"); document.body.classList.remove("no-scroll"); };
   $("#checkout-close").addEventListener("click", closeModal); $("#modal-backdrop").addEventListener("click", e => { if (e.target.id === "modal-backdrop") closeModal(); });
   $("#receipt-download").addEventListener("click", () => { if (savedReceiptOrder) downloadReceiptPdf(savedReceiptOrder); });
+  $("#pay-order-now").addEventListener("click", async () => {
+    if (!savedReceiptOrder || !supabaseClient) return;
+    const button = $("#pay-order-now"), status = $("#payment-start-status"); button.disabled = true; button.textContent = "Opening Paystack…"; status.textContent = "";
+    const { data, error } = await supabaseClient.functions.invoke("initialize-paystack-payment", { body: { orderNumber: savedReceiptOrder.orderId } });
+    if (error || !data?.authorizationUrl) { button.disabled = false; button.innerHTML = 'Continue to secure payment <span>↗</span>'; status.textContent = data?.error || error?.message || "Payment could not start. Retry from your order history."; return; }
+    window.location.assign(data.authorizationUrl);
+  });
   const accountBackdrop = $("#account-backdrop");
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
   function isStoreAdmin() { return Boolean(signedInUser?.email && adminEmail && signedInUser.email.trim().toLowerCase() === adminEmail); }
@@ -417,9 +425,9 @@
     const status = $("#orders-status");
     if (!signedInUser || !supabaseClient) return;
     status.textContent = "Loading your orders…";
-    const { data, error } = await supabaseClient.from("orders").select("id,order_number,items,estimated_total,currency,status,created_at,order_status_events(status,created_at)").order("created_at", { ascending: false }).limit(25);
+    const { data, error } = await supabaseClient.from("orders").select("id,order_number,items,estimated_total,currency,status,payment_status,created_at,order_status_events(status,created_at)").order("created_at", { ascending: false }).limit(25);
     if (error) { status.textContent = "We couldn’t load your order history. Please try again."; return; }
-    status.textContent = "";
+    status.textContent = paymentReturned ? "Paystack has returned you to Trikonic. Payment status updates after secure verification; refresh shortly if it still says pending." : "";
     if (!data.length) { history.innerHTML = '<p class="account-empty">No order requests yet. Your requests will appear here.</p>'; return; }
     const stages = ["Order Received", "Payment Made", "Order Placed", "Order Shipped", "Order Arrived in Ghana", "Order Arrived at Warehouse", "Order Ready for Collection", "Order Delivered"];
     const normalized = value => String(value || "Order Received").trim().toLowerCase().replace(/[ _-]+/g, " ");
@@ -444,10 +452,19 @@
         }).join("")}</ol>`;
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
       const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
-      return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">View order tracking <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
+      const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && current !== "Order Cancelled";
+      const paymentLine = order.payment_status === "paid" ? '<p class="order-payment-state paid">Payment confirmed</p>' : unpaid ? `<p class="order-payment-state">Payment pending · Shipping is paid separately</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
+      return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">View order tracking <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
     }).join("");
   }
   $("#order-history").addEventListener("click", async event => {
+    const payButton = event.target.closest("[data-pay-order]");
+    if (payButton) {
+      event.preventDefault(); event.stopPropagation(); payButton.disabled = true; payButton.textContent = "Opening Paystack…";
+      const { data, error } = await supabaseClient.functions.invoke("initialize-paystack-payment", { body: { orderNumber: payButton.dataset.payOrder } });
+      if (error || !data?.authorizationUrl) { payButton.disabled = false; payButton.textContent = "Pay securely with Paystack"; $("#orders-status").textContent = data?.error || error?.message || "Payment could not start. Please try again."; return; }
+      window.location.assign(data.authorizationUrl); return;
+    }
     const button = event.target.closest("[data-cancel-order]");
     if (!button) return;
     event.preventDefault();
@@ -588,12 +605,12 @@
         // cross-origin response. Apps Script still receives it as e.postData.contents.
         sheetQueued = navigator.sendBeacon(endpoint, new Blob([JSON.stringify(order)], { type: "text/plain;charset=utf-8" }));
       }
-      $("#success-message").textContent = sheetQueued ? "Your request is saved. Download this receipt for your records; we’ll contact you to confirm availability and delivery." : "Your request is saved in your account, but the order sheet could not be reached. Download this receipt and contact us to confirm.";
+      $("#success-message").textContent = sheetQueued ? "Your order is saved. Pay securely to confirm it. We’ll email your tracking number after payment; SMS is sent when notifications are enabled." : "Your order is saved in your account, but the order sheet could not be reached. You can still pay securely and track it in your account.";
       $("#checkout-form-view").hidden = true; $("#checkout-success-view").hidden = false;
       cart.clear(); saveCart(); renderCart(); e.currentTarget.reset();
       setTimeout(loadOrderHistory, 0);
     } catch (err) { status.textContent = err.message || "We couldn’t save that just now. Please try again."; }
-    finally { submit.disabled = false; submit.innerHTML = 'Send my request <span>↗</span>'; }
+    finally { submit.disabled = false; submit.innerHTML = 'Continue to payment <span>↗</span>'; }
   });
   renderCategories(); renderProducts(); renderCart(); loadProductsFromSheet();
 })();

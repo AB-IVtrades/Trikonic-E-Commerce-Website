@@ -1,5 +1,7 @@
 -- Customer order history for the Trikonic storefront.
 -- The authenticated account owns every order row; customers have no access to another user's data.
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -11,6 +13,13 @@ create table if not exists public.orders (
   items jsonb not null check (jsonb_typeof(items) = 'array'),
   estimated_total numeric(12,2) not null check (estimated_total >= 0),
   currency text not null default 'GHS',
+  customer_email text not null check (customer_email <> ''),
+  payment_status text not null default 'pending'
+    check (payment_status in ('pending', 'paid', 'failed', 'refunded', 'not_required')),
+  payment_reference text unique,
+  payment_paid_at timestamptz,
+  email_notified_at timestamptz,
+  sms_notified_at timestamptz,
   status text not null default 'Order Received'
     check (status in ('Order Received', 'Payment Made', 'Order Placed', 'Order Shipped', 'Order Arrived in Ghana', 'Order Arrived at Warehouse', 'Order Ready for Collection', 'Order Delivered', 'Order Cancelled')),
   created_at timestamptz not null default now()
@@ -33,6 +42,24 @@ drop policy if exists "Customers can create their own orders" on public.orders;
 create policy "Customers can create their own orders"
   on public.orders for insert to authenticated
   with check ((select auth.uid()) = user_id);
+
+-- Payment state and notification destinations are always derived by the server.
+create or replace function private.prepare_order_for_payment()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  new.customer_email := lower(coalesce(auth.jwt() ->> 'email', ''));
+  new.payment_status := 'pending';
+  new.payment_reference := null;
+  new.payment_paid_at := null;
+  new.email_notified_at := null;
+  new.sms_notified_at := null;
+  return new;
+end;
+$$;
+revoke all on function private.prepare_order_for_payment() from public, anon, authenticated;
+drop trigger if exists orders_prepare_payment on public.orders;
+create trigger orders_prepare_payment before insert on public.orders
+  for each row execute function private.prepare_order_for_payment();
 
 -- Private status history: customers can read only events for orders they own.
 create table if not exists public.order_status_events (

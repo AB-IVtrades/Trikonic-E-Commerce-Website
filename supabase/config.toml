@@ -3,3 +3,9 @@ verify_jwt = false
 
 [functions.customer-cancel-order]
 verify_jwt = true
+
+[functions.initialize-paystack-payment]
+verify_jwt = true
+
+[functions.paystack-webhook]
+verify_jwt = false

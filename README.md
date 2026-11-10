@@ -65,7 +65,7 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-The site does not take payment. Customers must sign in or create and confirm an account before the checkout form opens or an order can be submitted. Supabase Row Level Security also rejects anonymous order inserts. Each request is saved to the customer's Supabase order history and sent to `Trikonic Orders` in Google Sheets. Your team then confirms availability, delivery, and payment with them. After an order is saved, the customer can download a PDF order-request receipt. It is not proof of payment; shipping is paid separately by the customer and is excluded from the item subtotal.
+Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Shipping is paid separately and is excluded from the item subtotal.
 
 To connect the order form and product catalog to the existing Sheet:
 
@@ -75,7 +75,7 @@ To connect the order form and product catalog to the existing Sheet:
 4. In Apps Script choose **Deploy → Manage deployments**, edit the Web App deployment, select **New version**, and deploy. Keep **Execute as** set to your account and **Who has access** set to **Anyone**. The Web App URL should remain the same, so `config.js` does not need a change.
 5. Refresh the website. Submit one clearly marked test order and check `Trikonic Orders` and **My account → Order history**; remove any test records afterwards.
 
-The Web App must accept requests from website visitors, so its URL is public. Keep only order fields in this spreadsheet, restrict spreadsheet access to your team, and redeploy the Apps Script deployment after changing its code. The website queues each request with a browser POST. Google Apps Script redirects its response, so the browser cannot verify the Sheet write; the customer sees an “on its way” message after the browser queues it. Check the Sheet when you first set this up.
+The Web App must accept requests from website visitors, so its URL is public. Keep only order fields in this spreadsheet, restrict spreadsheet access to your team, and redeploy the Apps Script deployment after changing its code. Google Apps Script redirects its response, so the browser cannot verify the Sheet write; check the Sheet when you first set this up.
 
 ### Update order status from the Sheet
 
@@ -110,4 +110,25 @@ The `customer-cancel-order` Edge Function requires a signed-in Supabase JWT and 
 - Replace example catalog items and stock photos with your actual products and images.
 - Set a real contact email in `app.js` (the email fallback) and `index.html` (the newsletter link and footer if desired).
 - Add clear delivery, returns, and privacy information for your business.
-- Connect and check the Sheet with a test request. Online payment is not implemented.
+- Verify Paystack payment using test mode before enabling live keys. The server checks the transaction amount, currency, reference, and verified status before setting an order to `Payment Made`.
+- Keep Paystack and Resend API keys in Supabase Edge Function secrets only. Never add them to `config.js`, the website, GitHub, or chat.
+
+### Paystack online payments and tracking notices
+
+The checkout uses Paystack's hosted checkout. Orders remain unpaid until the webhook signature and Paystack's server-side transaction verification both succeed. The backend checks the paid amount and currency against the saved order. After confirmation it updates the Supabase order status, advances the Google Sheet status from `Order Received` to `Payment Made`, and emails the customer their order/tracking number. Customers can retry a pending payment from **My account → Order history**.
+
+Set these values in **Supabase → Edge Functions → Secrets** (do not paste secrets into chat or source files):
+
+- `PAYSTACK_SECRET_KEY`: start with the Paystack **test secret key**. Switch to the live secret key only after a successful test and business verification.
+- `RESEND_API_KEY`: the Resend API key for order emails.
+- `TRIKONIC_FROM_EMAIL`: a sender on the verified domain, for example `Trikonic Imports <orders@trikonicimports.com>`.
+- `ORDER_STATUS_SYNC_TOKEN`: the same private token as Apps Script property `TRIKONIC_STATUS_SYNC_TOKEN`.
+- `APPS_SCRIPT_ORDER_ENDPOINT`: the Apps Script Web App URL already in `config.js`.
+
+In **Paystack Dashboard → Settings → API Keys & Webhooks**, configure the webhook URL as `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/paystack-webhook`. Keep the webhook active in test mode while `PAYSTACK_SECRET_KEY` is a test secret. The webhook does not use a browser return page as proof of payment.
+
+Before testing, replace the Apps Script editor contents with this repository's `google-apps-script.gs`, save, and deploy it as a **new Web App version**. Keep the same `TRIKONIC_STATUS_SYNC_TOKEN` script property and make sure `APPS_SCRIPT_ORDER_ENDPOINT` points at that deployment. Payment confirmations will retry the webhook until the Sheet status update and email notification both succeed.
+
+For optional SMS order-number notices, set up a Hubtel SMS account and approved sender ID, then add `HUBTEL_SMS_CLIENT_ID`, `HUBTEL_SMS_CLIENT_SECRET`, and `HUBTEL_SMS_SENDER_ID` as Supabase Edge Function secrets. A valid Ghana mobile number must be entered in the order contact field. Without these Hubtel secrets, email notifications still work.
+
+Before taking real payments, complete Paystack business activation and test card/mobile-money flows, failed payments, retries, and spreadsheet status updates. The total currently charged is the item subtotal; the shipping fee is collected separately after delivery is confirmed.
