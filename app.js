@@ -18,8 +18,10 @@
     const storedCart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
     if (Array.isArray(storedCart)) cart = new Map(storedCart.filter(row => Array.isArray(row) && row.length === 2 && Number(row[1]) > 0).map(([id, quantity]) => [String(id), Number(quantity)]));
   } catch (_) { cart = new Map(); }
-  let category = "All finds";
-  let searchTerm = "";
+  let category = new URLSearchParams(location.search).get("category") || "All finds";
+  let searchTerm = new URLSearchParams(location.search).get("search") || "";
+  let maxPriceFilter = Number.POSITIVE_INFINITY;
+  let productSort = "recommended";
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
   function parseCartKey(key) {
@@ -161,7 +163,12 @@
     if (catalogState === "error") { grid.innerHTML = '<p class="catalog-message">We couldn’t load the catalog right now. Please refresh in a moment.</p>'; return; }
     if (catalogState === "empty") { grid.innerHTML = '<p class="catalog-message">No products are published right now. Please check back soon.</p>'; return; }
     const query = searchTerm.trim().toLowerCase();
-    const shown = products.filter(p => (category === "All finds" || p.category === category) && (!query || `${p.name} ${p.category} ${p.description} ${(p.colors || []).join(" ")} ${(p.sizes || []).join(" ")}`.toLowerCase().includes(query)));
+    let shown = products.filter(p => (category === "All finds" || p.category === category) && productStartingPrice(p) <= maxPriceFilter && (!query || `${p.name} ${p.category} ${p.description} ${(p.colors || []).join(" ")} ${(p.sizes || []).join(" ")}`.toLowerCase().includes(query)));
+    if (productSort === "price-low") shown = shown.sort((a, b) => productStartingPrice(a) - productStartingPrice(b));
+    else if (productSort === "price-high") shown = shown.sort((a, b) => productStartingPrice(b) - productStartingPrice(a));
+    else if (productSort === "name") shown = shown.sort((a, b) => a.name.localeCompare(b.name));
+    const resultCount = $("#product-result-count");
+    if (resultCount) resultCount.textContent = `Showing ${shown.length} of ${products.length} products`;
     if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products in this category right now."}</p>`; return; }
     grid.innerHTML = shown.map(p => {
       const preorder = p.availability === "preorder";
@@ -180,8 +187,11 @@
     const cats = ["All finds", ...new Set(products.map(p => p.category))];
     $("#categories").innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
   }
+  $("#product-search").value = searchTerm;
   $("#product-search").addEventListener("input", event => { searchTerm = event.currentTarget.value; renderProducts(); });
-  $("#search-form").addEventListener("submit", event => { event.preventDefault(); searchTerm = $("#product-search").value; renderProducts(); $("#shop").scrollIntoView({ behavior: "smooth" }); });
+  $("#search-form").addEventListener("submit", event => { event.preventDefault(); searchTerm = $("#product-search").value.trim(); if (!["shop.html", "categories.html"].includes(location.pathname.split("/").pop())) { location.href = `shop.html?search=${encodeURIComponent(searchTerm)}`; return; } renderProducts(); $("#shop").scrollIntoView({ behavior: "smooth" }); });
+  $("#sort-products")?.addEventListener("change", event => { productSort = event.currentTarget.value; renderProducts(); });
+  $("#max-price")?.addEventListener("input", event => { maxPriceFilter = Number(event.currentTarget.value); const label = $("#max-price-label"); if (label) label.textContent = `Max Price: GH₵${maxPriceFilter.toLocaleString()}`; renderProducts(); });
   function loadProductsFromSheet() {
     const endpoint = window.TRikonicOrderEndpoint || "";
     const finishCatalogLoad = () => { renderCategories(); renderProducts(); renderCart(); };
@@ -486,6 +496,7 @@
   $("#account-side-history").addEventListener("click", event => { document.querySelectorAll(".account-side-link").forEach(link => link.classList.remove("active")); event.currentTarget.classList.add("active"); $("#order-history").scrollIntoView({ block: "nearest" }); });
   document.addEventListener("click", event => { if (!event.target.closest(".account-menu-wrap")) setAccountPopover(false); });
   $("#maintenance-admin-open").addEventListener("click", () => openAccount("signin"));
+  $("#footer-track-order")?.addEventListener("click", () => openAccount("signin"));
   $("#account-close").addEventListener("click", closeAccount);
   $("#orders-refresh").addEventListener("click", loadOrderHistory);
   accountBackdrop.addEventListener("click", e => { if (e.target === accountBackdrop) closeAccount(); });
