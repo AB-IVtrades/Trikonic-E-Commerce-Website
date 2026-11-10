@@ -120,12 +120,13 @@ The checkout uses Paystack's hosted checkout. Orders remain unpaid until the web
 Set these values in **Supabase → Edge Functions → Secrets** (do not paste secrets into chat or source files):
 
 - `PAYSTACK_SECRET_KEY`: start with the Paystack **test secret key**. Switch to the live secret key only after a successful test and business verification.
+- `PAYSTACK_WEBHOOK_SECRET`: the webhook signing secret (`whsec_...`) generated in Paystack **Developers → API configuration** for the same environment. The handler also accepts Paystack's legacy signature while the dashboard still sends it.
 - `RESEND_API_KEY`: the Resend API key for order emails.
 - `TRIKONIC_FROM_EMAIL`: a sender on the verified domain, for example `Trikonic Imports <orders@trikonicimports.com>`.
 - `ORDER_STATUS_SYNC_TOKEN`: the same private token as Apps Script property `TRIKONIC_STATUS_SYNC_TOKEN`.
 - `APPS_SCRIPT_ORDER_ENDPOINT`: the Apps Script Web App URL already in `config.js`.
 
-In **Paystack Dashboard → Settings → API Keys & Webhooks**, configure the webhook URL as `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/paystack-webhook`. Keep the webhook active in test mode while `PAYSTACK_SECRET_KEY` is a test secret. The webhook does not use a browser return page as proof of payment.
+In Paystack **Developers → API configuration** (test mode), generate a webhook signing secret and add it as `PAYSTACK_WEBHOOK_SECRET` in Supabase. Set the webhook URL to `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/paystack-webhook` in the test environment's webhook settings. Keep the webhook and both Paystack secrets in test mode during testing. The webhook does not use a browser return page as proof of payment.
 
 Before testing, replace the Apps Script editor contents with this repository's `google-apps-script.gs`, save, and deploy it as a **new Web App version**. Keep the same `TRIKONIC_STATUS_SYNC_TOKEN` script property and make sure `APPS_SCRIPT_ORDER_ENDPOINT` points at that deployment. Payment confirmations will retry the webhook until the Sheet status update and email notification both succeed.
 
