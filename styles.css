@@ -157,6 +157,7 @@ body.mobile-nav-open{overflow:hidden}
   .shop-sidebar,.category-page-sidebar{width:100%;max-width:100%;overflow:hidden}
   .shop-sidebar .category-list,.category-page-sidebar .category-list{width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;flex-wrap:nowrap}
   .shop-sidebar .category-list .category-chip,.category-page-sidebar .category-list .category-chip{flex:0 0 auto}
+  .category-list .category-chip span{float:none;margin-left:5px}
   .shop-results,.results-toolbar,.sort-control{max-width:100%}
   .shop-results .product-grid{width:100%;max-width:100%;min-width:0}
   .shop-results .product-card{min-width:0}
