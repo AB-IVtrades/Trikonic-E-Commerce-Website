@@ -9,6 +9,7 @@
     ? window.supabase.createClient(supabaseConfig.url, supabaseConfig.publishableKey)
     : null;
   let signedInUser = null;
+  let passwordRecoveryMode = false;
   let resumeCheckoutAfterAuth = false;
   const paymentReturned = new URLSearchParams(location.search).get("payment") === "return";
   const adminEmail = String(window.TRikonicAdminEmail || "").trim().toLowerCase();
@@ -413,13 +414,14 @@
   });
   function openAccount(mode = "signin") { setAuthMode(mode); accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
   function renderAccountState() {
-    $("#account-backdrop .account-modal").classList.toggle("account-auth-mode", !signedInUser);
+    const showAuth = !signedInUser || passwordRecoveryMode;
+    $("#account-backdrop .account-modal").classList.toggle("account-auth-mode", showAuth);
     $("#account-trigger-label").innerHTML = signedInUser ? "My account<br>Orders" : "Sign in<br>Account";
     $("#account-menu-auth").textContent = signedInUser ? "My account" : "Sign in or create account";
     $("#account-menu-history").innerHTML = signedInUser ? '<span aria-hidden="true">▤</span> Order history' : '<span aria-hidden="true">▤</span> Purchase history';
     $("#checkout-open").innerHTML = signedInUser ? 'Review your request <span>↗</span>' : 'Create an account to order <span>↗</span>';
-    $("#account-auth-view").hidden = Boolean(signedInUser);
-    $("#account-dashboard").hidden = !signedInUser;
+    $("#account-auth-view").hidden = !showAuth;
+    $("#account-dashboard").hidden = showAuth;
     if (signedInUser) $("#account-email").textContent = signedInUser.email || "Signed in";
     renderMaintenanceMode();
   }
@@ -494,13 +496,24 @@
   });
   function setAuthMode(mode) {
     const signup = mode === "signup";
+    const recovery = mode === "recover";
+    const updatePassword = mode === "update-password";
+    const signIn = mode === "signin";
+    if (!updatePassword) passwordRecoveryMode = false;
     $("#account-name-field").hidden = !signup;
-    $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : "Welcome to <em>Trikonic.</em>";
-    $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here." : "Sign in to place order requests and keep track of them here.";
-    $("#account-submit").innerHTML = signup ? "Create account <span>↗</span>" : "Sign in <span>↗</span>";
-    $("#account-switch-copy").innerHTML = signup ? 'Already have an account? <button type="button" id="account-switch">Sign in</button>' : 'New here? <button type="button" id="account-switch">Create an account</button>';
+    $("#account-password-field").hidden = recovery;
+    const passwordInput = $("#account-form [name=password]");
+    passwordInput.required = !recovery;
+    passwordInput.autocomplete = updatePassword ? "new-password" : "current-password";
+    $("#account-password-field").firstChild.textContent = updatePassword ? "New password" : "Password";
+    $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : recovery ? "Reset your <em>password.</em>" : updatePassword ? "Choose a <em>new password.</em>" : "Welcome to <em>Trikonic.</em>";
+    $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here." : recovery ? "We’ll email you a secure link to reset your password." : updatePassword ? "Choose a new password for your Trikonic account." : "Sign in to place order requests and keep track of them here.";
+    $("#account-submit").innerHTML = signup ? "Create account <span>↗</span>" : recovery ? "Send reset link <span>↗</span>" : updatePassword ? "Update password <span>↗</span>" : "Sign in <span>↗</span>";
+    $("#account-recovery-actions").hidden = !signIn;
+    $("#account-switch-copy").innerHTML = signup ? 'Already have an account? <button type="button" id="account-switch">Sign in</button>' : signIn ? 'New here? <button type="button" id="account-switch">Create an account</button>' : '<button type="button" id="account-switch">Back to sign in</button>';
     $("#account-form").dataset.mode = mode;
     $("#account-status").textContent = "";
+    $("#account-status").classList.remove("account-error");
   }
   const accountPopover = $("#account-popover");
   function setAccountPopover(open) {
@@ -518,7 +531,34 @@
   $("#account-close").addEventListener("click", closeAccount);
   $("#orders-refresh").addEventListener("click", loadOrderHistory);
   accountBackdrop.addEventListener("click", e => { if (e.target === accountBackdrop) closeAccount(); });
-  $("#account-switch-copy").addEventListener("click", e => { if (e.target.id === "account-switch") setAuthMode($("#account-form").dataset.mode === "signup" ? "signin" : "signup"); });
+  $("#account-switch-copy").addEventListener("click", e => {
+    if (e.target.id !== "account-switch") return;
+    const mode = $("#account-form").dataset.mode;
+    setAuthMode(mode === "signup" ? "signin" : mode === "signin" ? "signup" : "signin");
+  });
+  $("#account-forgot-password").addEventListener("click", () => setAuthMode("recover"));
+  async function sendAccountEmail(kind) {
+    const status = $("#account-status");
+    const button = kind === "recovery" ? $("#account-submit") : $("#account-resend-confirmation");
+    const email = String($("#account-form [name=email]").value || "").trim();
+    if (!email) { status.textContent = "Enter your email address first."; status.classList.add("account-error"); $("#account-form [name=email]").focus(); return; }
+    if (!supabaseClient) { status.textContent = "Account access isn’t configured yet. Please contact us."; status.classList.add("account-error"); return; }
+    button.disabled = true;
+    status.classList.remove("account-error");
+    try {
+      const response = kind === "recovery"
+        ? await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+        : await supabaseClient.auth.resend({ type: "signup", email, options: { emailRedirectTo: window.location.origin } });
+      if (response.error) throw response.error;
+      status.textContent = kind === "recovery"
+        ? "If an account exists for that address, we’ve sent a password reset link. Check your inbox and spam folder."
+        : "If that account still needs confirmation, we’ve sent a fresh confirmation link. Check your inbox and spam folder.";
+    } catch (error) {
+      status.textContent = error.message || "We couldn’t send that email. Wait a minute and try again.";
+      status.classList.add("account-error");
+    } finally { button.disabled = false; }
+  }
+  $("#account-resend-confirmation").addEventListener("click", () => sendAccountEmail("confirmation"));
   $("#account-form").addEventListener("submit", async e => {
     e.preventDefault();
     const status = $("#account-status");
@@ -529,8 +569,18 @@
     const fields = new FormData(e.currentTarget);
     const email = String(fields.get("email") || "").trim();
     const password = String(fields.get("password") || "");
+    const mode = e.currentTarget.dataset.mode;
     try {
-      if (e.currentTarget.dataset.mode === "signup") {
+      if (mode === "recover") {
+        await sendAccountEmail("recovery");
+      } else if (mode === "update-password") {
+        const { error } = await supabaseClient.auth.updateUser({ password });
+        if (error) throw error;
+        passwordRecoveryMode = false;
+        signedInUser = (await supabaseClient.auth.getUser()).data.user || signedInUser;
+        renderAccountState();
+        status.textContent = "Your password has been updated. You’re signed in.";
+      } else if (mode === "signup") {
         const fullName = String(fields.get("fullName") || "").trim();
         const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: fullName }, emailRedirectTo: window.location.origin } });
         if (error) throw error;
@@ -545,6 +595,7 @@
       }
     } catch (error) {
       status.textContent = error.message || "We couldn’t complete that. Please check your details and try again.";
+      if (mode === "signin" && /invalid login credentials/i.test(status.textContent)) status.textContent = "Email or password didn’t match. Check your details, or use Forgot password? to reset it.";
       status.classList.add("account-error");
     } finally { submit.disabled = false; }
   });
@@ -555,8 +606,13 @@
     else { signedInUser = null; renderAccountState(); setAuthMode("signin"); }
   });
   if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange((_event, session) => {
+    supabaseClient.auth.onAuthStateChange((event, session) => {
       signedInUser = session?.user || null;
+      if (event === "PASSWORD_RECOVERY") {
+        passwordRecoveryMode = true;
+        renderAccountState();
+        openAccount("update-password");
+      }
       renderAccountState();
       setTimeout(loadMaintenanceMode, 0);
       if (signedInUser) setTimeout(loadOrderHistory, 0);
