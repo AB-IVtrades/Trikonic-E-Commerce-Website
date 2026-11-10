@@ -57,6 +57,9 @@ function doGet(e) {
         const rawSalePrice = value("Sale Price (GHS)");
         const salePrice = typeof rawSalePrice === "number" ? rawSalePrice : Number(String(rawSalePrice || "").replace(/[^0-9.-]/g, ""));
         const parseOptions = raw => [...new Set(String(raw || "").split(/[,;\n]/).map(option => option.trim()).filter(Boolean))];
+        const colors = parseOptions(value("Available Colors"));
+        const sizes = parseOptions(value("Available Sizes"));
+        const normalizeOption = option => String(option || "").trim().toLowerCase().replace(/\s+/g, " ");
         const variantPrices = String(value("Variant Prices (GHS)") || "").split(/[;,\n]/).map(entry => {
           const separator = entry.lastIndexOf(":");
           if (separator < 0) return null;
@@ -64,7 +67,11 @@ function doGet(e) {
           const rawPrice = entry.slice(separator + 1).trim();
           const price = Number(rawPrice.replace(/[^0-9.-]/g, ""));
           if (options.length > 2 || !Number.isFinite(price) || price <= 0) return null;
-          return { color: options[0] || "", size: options[1] || "", price };
+          if (options.length === 2) return { color: options[0], size: options[1], price };
+          const option = options[0] || "";
+          const normalized = normalizeOption(option);
+          const isSize = sizes.some(size => normalizeOption(size) === normalized) || /\d\s*[x×*]\s*\d/i.test(option);
+          return { color: isSize ? "" : option, size: isSize ? option : "", price };
         }).filter(Boolean);
         const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
         const photos = [...new Set([image, ...String(value("Additional Photos") || "").split(/[;\n]/)].map(photo => String(photo || "").trim()).filter(Boolean))];
@@ -77,7 +84,7 @@ function doGet(e) {
           id: String(sku).trim(), name: product.name, category: product.category,
           price: product.price, originalPrice: product.price, salePrice: flashSale ? salePrice : null, flashSale,
           description: String(description || "").trim(), image: String(image).trim(), images: photos, specs, availability,
-          colors: parseOptions(value("Available Colors")), sizes: parseOptions(value("Available Sizes")), variantPrices,
+          colors, sizes, variantPrices,
           tag: String(tag || "").trim(), color: safeColor
         });
       });
