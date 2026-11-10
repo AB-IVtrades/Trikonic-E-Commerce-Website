@@ -170,3 +170,35 @@ body.mobile-nav-open{overflow:hidden}
   .ordering-trust{width:100%;max-width:100%}
   .contact-form-modal{max-width:calc(100vw - 24px)}
 }
+
+/* Product details: let the image define its own height so there are no blank
+   bands above or below it, and keep the mobile dialog within the viewport. */
+.detail-main-image{height:auto;min-height:0;background:#fff;display:flex;align-items:center;justify-content:center}
+.detail-main-image img{display:block;width:100%;height:auto;max-height:min(67vh,640px);object-fit:contain}
+@media(max-width:650px){
+  .product-detail-backdrop{padding:0;overflow:hidden}
+  .product-detail-modal{box-sizing:border-box;width:100%;max-width:100vw;height:100dvh;max-height:100dvh;padding:18px 14px calc(16px + env(safe-area-inset-bottom));overflow-x:hidden;overflow-y:auto}
+  .detail-close{margin:-8px -4px 0 0}
+  .product-detail-layout{box-sizing:border-box;width:100%;max-width:100%;min-width:0;grid-template-columns:minmax(0,1fr);gap:14px}
+  .detail-gallery,.detail-information,.detail-purchase{box-sizing:border-box;width:100%;max-width:100%;min-width:0;grid-column:1}
+  .detail-gallery{grid-template-columns:minmax(0,1fr);grid-row:auto;gap:8px}
+  .detail-main-image{grid-column:1;grid-row:1;width:100%;min-height:0;height:auto;max-height:none;overflow:hidden;border-radius:4px}
+  .detail-main-image img{width:100%;height:auto;max-width:100%;max-height:34dvh;object-fit:contain}
+  .detail-thumbnails{grid-column:1;grid-row:2;flex-direction:row;width:100%;max-width:100%;max-height:none;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain}
+  .detail-thumbnail{flex:0 0 48px;width:48px;height:52px}
+  .detail-information{padding:0}
+  .detail-information h2{font-size:23px}
+  .detail-description{margin:10px 0 14px;line-height:1.55}
+  .detail-option-group{margin:12px 0;padding-bottom:12px}
+  .detail-specs{margin-top:12px}
+  .detail-specs summary{padding:11px}
+  .detail-specs dl>div{min-height:34px}
+  .detail-specs dt,.detail-specs dd{padding:9px}
+  .detail-purchase{position:static;padding:14px;margin-top:0}
+  .detail-price{margin:8px 0}
+  .detail-price strong,.detail-price .detail-sale-price{font-size:22px}
+  .detail-purchase-status{margin:6px 0 9px}
+  .detail-add{margin:4px 0 8px}
+  .detail-purchase>p{margin:6px 0}
+  .detail-purchase-note{gap:3px;margin-top:9px;padding:9px}
+}
