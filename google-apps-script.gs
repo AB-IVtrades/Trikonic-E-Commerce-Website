@@ -56,8 +56,17 @@ function doGet(e) {
         const flashSaleRequested = flashValue === true || ["true", "yes", "1", "active"].includes(String(flashValue).trim().toLowerCase());
         const rawSalePrice = value("Sale Price (GHS)");
         const salePrice = typeof rawSalePrice === "number" ? rawSalePrice : Number(String(rawSalePrice || "").replace(/[^0-9.-]/g, ""));
-        const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
         const parseOptions = raw => [...new Set(String(raw || "").split(/[,;\n]/).map(option => option.trim()).filter(Boolean))];
+        const variantPrices = String(value("Variant Prices (GHS)") || "").split(/[;\n]/).map(entry => {
+          const separator = entry.lastIndexOf(":");
+          if (separator < 0) return null;
+          const options = entry.slice(0, separator).split("|").map(option => option.trim());
+          const rawPrice = entry.slice(separator + 1).trim();
+          const price = Number(rawPrice.replace(/[^0-9.-]/g, ""));
+          if (options.length > 2 || !Number.isFinite(price) || price <= 0) return null;
+          return { color: options[0] || "", size: options[1] || "", price };
+        }).filter(Boolean);
+        const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
         const photos = [...new Set([image, ...String(value("Additional Photos") || "").split(/[;\n]/)].map(photo => String(photo || "").trim()).filter(Boolean))];
         const specs = String(value("Product Specs") || "").split(/[;\n]/).map(line => {
           const separator = line.indexOf(":");
@@ -66,9 +75,9 @@ function doGet(e) {
         const safeColor = /^#[0-9a-f]{6}$/i.test(String(color).trim()) ? String(color).trim() : "#e8e4dc";
         products.push({
           id: String(sku).trim(), name: product.name, category: product.category,
-          price: flashSale ? salePrice : product.price, originalPrice: product.price, flashSale,
+          price: product.price, originalPrice: product.price, salePrice: flashSale ? salePrice : null, flashSale,
           description: String(description || "").trim(), image: String(image).trim(), images: photos, specs, availability,
-          colors: parseOptions(value("Available Colors")), sizes: parseOptions(value("Available Sizes")),
+          colors: parseOptions(value("Available Colors")), sizes: parseOptions(value("Available Sizes")), variantPrices,
           tag: String(tag || "").trim(), color: safeColor
         });
       });
@@ -151,6 +160,9 @@ function setupTrikonicCatalogSheet() {
   const availabilityColumn = headers.indexOf("availability") + 1;
   const flashColumn = headers.indexOf("flash sale") + 1;
   const salePriceColumn = headers.indexOf("sale price (ghs)") + 1;
+  const colorsColumn = headers.indexOf("available colors") + 1;
+  const sizesColumn = headers.indexOf("available sizes") + 1;
+  const variantPricesColumn = headers.indexOf("variant prices (ghs)") + 1;
   const rows = Math.max(sheet.getMaxRows() - 1, 1);
   sheet.getRange(2, availabilityColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(["In Stock", "Pre-Order", "Out of Stock"], true).setAllowInvalid(false).build()
@@ -161,6 +173,11 @@ function setupTrikonicCatalogSheet() {
   sheet.getRange(2, salePriceColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireNumberGreaterThan(0).setAllowInvalid(false).build()
   );
+  // These are free-text, comma-separated option lists. Clear any dropdown rules
+  // inherited when the new columns were created or copied from another column.
+  sheet.getRange(2, colorsColumn, rows, 1).clearDataValidations();
+  sheet.getRange(2, sizesColumn, rows, 1).clearDataValidations();
+  sheet.getRange(2, variantPricesColumn, rows, 1).clearDataValidations();
   sheet.setFrozenRows(1);
 }
 
@@ -169,7 +186,7 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Additional Photos", "Product Specs"].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs"].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextColumn).setValue(header);

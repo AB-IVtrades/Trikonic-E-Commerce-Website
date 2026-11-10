@@ -29,6 +29,27 @@
   function cartKey(id, color = "", size = "") { return color || size ? JSON.stringify([String(id), String(color), String(size)]) : String(id); }
   function productForCartKey(key) { const { id } = parseCartKey(key); return products.find(item => item.id === id); }
   function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
+  function regularPriceFor(product, selection = {}) {
+    const prices = product?.variantPrices || [];
+    const color = normalizeVariantOption(selection.color), size = normalizeVariantOption(selection.size);
+    const find = (matchColor, matchSize) => prices.find(option => normalizeVariantOption(option.color) === matchColor && normalizeVariantOption(option.size) === matchSize);
+    const match = (color && size && find(color, size)) || (color && find(color, "")) || (size && find("", size));
+    return Number(match?.price) || Number(product?.price) || 0;
+  }
+  function priceFor(product, selection = {}) {
+    const regular = regularPriceFor(product, selection);
+    const sale = Number(product?.salePrice);
+    return { regular, current: product?.flashSale && sale > 0 && sale < regular ? sale : regular, onSale: Boolean(product?.flashSale && sale > 0 && sale < regular) };
+  }
+  function priceMarkup(product, selection = {}, prefix = "") {
+    const { regular, current, onSale } = priceFor(product, selection);
+    return onSale ? `<span class="sale-prices"><s>${money(regular)}</s><strong>${money(current)}</strong></span>` : `${prefix}<strong>${money(current)}</strong>`;
+  }
+  function productStartingPrice(product) {
+    const options = (product?.variantPrices || []).map(option => ({ color: option.color, size: option.size }));
+    const prices = [priceFor(product, {}).current, ...options.map(option => priceFor(product, option).current)].filter(price => price > 0);
+    return Math.min(...prices);
+  }
   function cartSelectionIsValid(product, selection) {
     const matches = (options, selected) => !options?.length || options.some(option => normalizeVariantOption(option) === normalizeVariantOption(selected));
     return Boolean(product && matches(product.colors, selection.color) && matches(product.sizes, selection.size));
@@ -48,9 +69,9 @@
       return product ? { product, quantity, selection: parseCartKey(key) } : null;
     }).filter(Boolean);
     $(target).innerHTML = rows.length
-      ? rows.map(({ product, quantity, selection }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}${selection.color || selection.size ? `<small class="variant-summary">${[selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(product.price * quantity)}</strong></div>`).join("")
+      ? rows.map(({ product, quantity, selection }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}${selection.color || selection.size ? `<small class="variant-summary">${[selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(priceFor(product, selection).current * quantity)}</strong></div>`).join("")
       : '<p class="receipt-empty">Your bag is empty.</p>';
-    if (totalTarget) $(totalTarget).textContent = money(rows.reduce((sum, row) => sum + row.product.price * row.quantity, 0));
+    if (totalTarget) $(totalTarget).textContent = money(rows.reduce((sum, row) => sum + priceFor(row.product, row.selection).current * row.quantity, 0));
   }
 
   function downloadReceiptPdf(order) {
@@ -147,7 +168,10 @@
       const outOfStock = p.availability === "out_of_stock";
       const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK";
       const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
-      const price = p.flashSale ? `<span class="sale-prices"><s>${money(p.originalPrice)}</s><strong>${money(p.price)}</strong></span>` : `<strong>${money(p.price)}</strong>`;
+      const listedPrices = [p.price, ...(p.variantPrices || []).map(option => option.price)].filter(value => Number(value) > 0);
+      const hasVariantPricing = new Set(listedPrices).size > 1;
+      const startPrice = productStartingPrice(p);
+      const price = p.flashSale && startPrice < p.price ? `<span class="sale-prices"><s>${money(p.price)}</s><strong>From ${money(startPrice)}</strong></span>` : `<strong>${hasVariantPricing ? "From " : ""}${money(startPrice)}</strong>`;
       return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-add="${escapeAttr(p.id)}" aria-label="${outOfStock ? `${escapeAttr(p.name)} is out of stock` : optionsLabel ? `Choose options for ${escapeAttr(p.name)}` : `Add ${escapeAttr(p.name)} to bag`}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "×" : "+"}</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div>${price}</div></article>`;
     }).join("");
   }
@@ -181,7 +205,7 @@
   function renderCart() {
     const entries = [...cart.entries()].filter(([key, qty]) => qty > 0 && productForCartKey(key));
     const count = entries.reduce((s, [, q]) => s + q, 0);
-    const total = entries.reduce((s, [key, q]) => s + (productForCartKey(key)?.price || 0) * q, 0);
+    const total = entries.reduce((s, [key, q]) => { const p = productForCartKey(key); return s + (p ? priceFor(p, parseCartKey(key)).current : 0) * q; }, 0);
     $("#cart-count").textContent = count; $("#drawer-count").textContent = `(${count})`;
     $("#subtotal").textContent = money(total); $("#checkout-total").textContent = money(total);
     $("#cart-empty").hidden = count > 0; $("#cart-bottom").hidden = count === 0;
@@ -190,7 +214,7 @@
     $("#cart-stock-warning").hidden = !hasOutOfStock && !hasInvalidOptions;
     $("#cart-stock-warning").textContent = hasOutOfStock ? "Remove out-of-stock items before continuing." : "Some saved colour or size choices are no longer available. Remove those items before continuing.";
     $("#checkout-open").disabled = hasOutOfStock || hasInvalidOptions;
-    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", invalid = !cartSelectionIsValid(p, selection); const badge = invalid ? "OPTION UNAVAILABLE" : preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = p.flashSale ? `<span class="sale-prices"><s>${money(p.originalPrice)}</s><strong>${money(p.price)}</strong></span>` : `<strong>${money(p.price)}</strong>`; const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${invalid ? "out-of-stock" : preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
+    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", invalid = !cartSelectionIsValid(p, selection); const badge = invalid ? "OPTION UNAVAILABLE" : preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = priceMarkup(p, selection); const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${invalid ? "out-of-stock" : preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
     renderCheckoutReceipt();
   }
   function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
@@ -210,6 +234,7 @@
     $("#detail-sizes").innerHTML = (detailProduct.sizes || []).map(size => `<button type="button" class="detail-size ${size === detailSize ? "selected" : ""}" data-detail-size="${escapeAttr(size)}" aria-pressed="${size === detailSize}">${escapeHtml(size)}</button>`).join("");
     const missingChoice = Boolean((detailProduct.colors?.length && !detailColor) || (detailProduct.sizes?.length && !detailSize));
     const unavailable = detailProduct.availability === "out_of_stock";
+    $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize });
     $("#detail-add").disabled = unavailable || missingChoice;
     $("#detail-purchase-status").textContent = unavailable ? "Currently out of stock" : missingChoice ? "Choose the available options to continue." : detailProduct.availability === "preorder" ? "Available for pre-order" : "In stock";
   }
@@ -228,7 +253,7 @@
     const availability = product.availability === "preorder" ? "Available for pre-order" : product.availability === "out_of_stock" ? "Currently out of stock" : "In stock";
     $("#detail-availability").textContent = availability;
     $("#detail-availability").className = `detail-availability ${product.availability === "preorder" ? "preorder" : product.availability === "out_of_stock" ? "out-of-stock" : "in-stock"}`;
-    $("#detail-price").innerHTML = product.flashSale ? `<span class="detail-sale-price">${money(product.price)}</span><s>${money(product.originalPrice)}</s><small>FLASH SALE</small>` : `<strong>${money(product.price)}</strong>`;
+    $("#detail-price").innerHTML = priceMarkup(product);
     $("#detail-purchase-status").textContent = availability;
     $("#detail-add").disabled = product.availability === "out_of_stock";
     $("#detail-add").innerHTML = product.availability === "out_of_stock" ? "Out of stock" : 'Add to bag <span>↗</span>';
@@ -264,15 +289,22 @@
   }
   function openVariantPicker(product) {
     pendingVariantProduct = product;
-    $("#variant-product-name").textContent = `${product.name} · ${money(product.price)}${product.flashSale ? ` (was ${money(product.originalPrice)})` : ""}`;
+    $("#variant-product-name").textContent = product.name;
     $("#variant-color-field").hidden = !product.colors?.length;
     $("#variant-size-field").hidden = !product.sizes?.length;
     fillVariantSelect($("#variant-color"), product.colors || [], "colour");
     fillVariantSelect($("#variant-size"), product.sizes || [], "size");
     $("#variant-status").textContent = "";
+    updateVariantPickerPrice();
     variantBackdrop.classList.add("show");
     variantBackdrop.setAttribute("aria-hidden", "false");
     document.body.classList.add("no-scroll");
+  }
+  function updateVariantPickerPrice() {
+    if (!pendingVariantProduct) return;
+    const selection = { color: $("#variant-color").value, size: $("#variant-size").value };
+    const { regular, current, onSale } = priceFor(pendingVariantProduct, selection);
+    $("#variant-product-name").textContent = `${pendingVariantProduct.name} · ${money(current)}${onSale ? ` (was ${money(regular)})` : ""}`;
   }
   function closeVariantPicker() {
     variantBackdrop.classList.remove("show");
@@ -286,6 +318,8 @@
     saveCart(); renderCart();
   }
   $("#variant-close").addEventListener("click", closeVariantPicker);
+  $("#variant-color").addEventListener("change", updateVariantPickerPrice);
+  $("#variant-size").addEventListener("change", updateVariantPickerPrice);
   variantBackdrop.addEventListener("click", event => { if (event.target === variantBackdrop) closeVariantPicker(); });
   $("#variant-form").addEventListener("submit", event => {
     event.preventDefault();
@@ -516,7 +550,7 @@
     if (!signedInUser) { closeModal(); openAccount("signup"); $("#account-status").textContent = "Create an account or sign in first so you can place and track this order."; return; }
     if (!supabaseClient) { status.textContent = "Order tracking is temporarily unavailable. Please try again later."; return; }
     const form = new FormData(e.currentTarget);
-    const items = [...cart.entries()].filter(([, quantity]) => quantity > 0).map(([key, quantity]) => { const p = productForCartKey(key), selection = parseCartKey(key); return p ? { id: p.id, name: p.name, color: selection.color, size: selection.size, availability: p.availability, flashSale: Boolean(p.flashSale), quantity, unitPrice: p.price, lineTotal: p.price * quantity } : null; }).filter(Boolean);
+    const items = [...cart.entries()].filter(([, quantity]) => quantity > 0).map(([key, quantity]) => { const p = productForCartKey(key), selection = parseCartKey(key), pricing = p && priceFor(p, selection); return p ? { id: p.id, name: p.name, color: selection.color, size: selection.size, availability: p.availability, flashSale: pricing.onSale, quantity, unitPrice: pricing.current, originalUnitPrice: pricing.regular, lineTotal: pricing.current * quantity } : null; }).filter(Boolean);
     if (items.some(item => item.availability === "out_of_stock")) { status.textContent = "Your bag contains an out-of-stock item. Remove it before sending your order."; return; }
     if ([...cart.entries()].some(([key]) => !cartSelectionIsValid(productForCartKey(key), parseCartKey(key)))) { status.textContent = "A colour or size in your bag is no longer available. Remove that item and choose an available option."; return; }
     const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
