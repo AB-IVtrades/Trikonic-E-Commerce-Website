@@ -364,7 +364,10 @@
   const closeModal = () => { $("#modal-backdrop").classList.remove("show"); document.body.classList.remove("no-scroll"); };
   $("#checkout-close").addEventListener("click", closeModal); $("#modal-backdrop").addEventListener("click", e => { if (e.target.id === "modal-backdrop") closeModal(); });
   $("#receipt-download").addEventListener("click", () => { if (savedReceiptOrder) downloadReceiptPdf(savedReceiptOrder); });
-  $("#pay-order-now").addEventListener("click", async () => {
+  // This payment handoff is only present on the payment-enabled checkout page.
+  // Other routes use the order-request receipt, so don't let the missing button
+  // abort shared startup (auth handlers and the Google Sheets catalog loader).
+  $("#pay-order-now")?.addEventListener("click", async () => {
     if (!savedReceiptOrder || !supabaseClient) return;
     const button = $("#pay-order-now"), status = $("#payment-start-status"); button.disabled = true; button.textContent = "Opening Paystack…"; status.textContent = "";
     const { data, error } = await supabaseClient.functions.invoke("initialize-paystack-payment", { body: { orderNumber: savedReceiptOrder.orderId } });
