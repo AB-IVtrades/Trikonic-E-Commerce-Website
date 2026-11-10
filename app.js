@@ -19,6 +19,7 @@
     if (Array.isArray(storedCart)) cart = new Map(storedCart.filter(row => Array.isArray(row) && row.length === 2 && Number(row[1]) > 0).map(([id, quantity]) => [String(id), Number(quantity)]));
   } catch (_) { cart = new Map(); }
   let category = "All finds";
+  let searchTerm = "";
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
   function parseCartKey(key) {
@@ -136,8 +137,9 @@
     if (catalogState === "loading") { grid.innerHTML = '<p class="catalog-message">Loading the latest finds…</p>'; return; }
     if (catalogState === "error") { grid.innerHTML = '<p class="catalog-message">We couldn’t load the catalog right now. Please refresh in a moment.</p>'; return; }
     if (catalogState === "empty") { grid.innerHTML = '<p class="catalog-message">No products are published right now. Please check back soon.</p>'; return; }
-    const shown = category === "All finds" ? products : products.filter(p => p.category === category);
-    if (!shown.length) { grid.innerHTML = '<p class="catalog-message">No products in this category right now.</p>'; return; }
+    const query = searchTerm.trim().toLowerCase();
+    const shown = products.filter(p => (category === "All finds" || p.category === category) && (!query || `${p.name} ${p.category} ${p.description} ${(p.colors || []).join(" ")} ${(p.sizes || []).join(" ")}`.toLowerCase().includes(query)));
+    if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products in this category right now."}</p>`; return; }
     grid.innerHTML = shown.map(p => {
       const preorder = p.availability === "preorder";
       const outOfStock = p.availability === "out_of_stock";
@@ -152,6 +154,8 @@
     const cats = ["All finds", ...new Set(products.map(p => p.category))];
     $("#categories").innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
   }
+  $("#product-search").addEventListener("input", event => { searchTerm = event.currentTarget.value; renderProducts(); });
+  $("#search-form").addEventListener("submit", event => { event.preventDefault(); searchTerm = $("#product-search").value; renderProducts(); $("#shop").scrollIntoView({ behavior: "smooth" }); });
   function loadProductsFromSheet() {
     const endpoint = window.TRikonicOrderEndpoint || "";
     const finishCatalogLoad = () => { renderCategories(); renderProducts(); renderCart(); };
@@ -293,7 +297,9 @@
   });
   function openAccount(mode = "signin") { setAuthMode(mode); accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
   function renderAccountState() {
-    $("#account-open").textContent = signedInUser ? "My account" : "Create account";
+    $("#account-trigger-label").innerHTML = signedInUser ? "My account<br>Orders" : "Sign in<br>Account";
+    $("#account-menu-auth").textContent = signedInUser ? "My account" : "Sign in or create account";
+    $("#account-menu-history").innerHTML = signedInUser ? '<span aria-hidden="true">▤</span> Order history' : '<span aria-hidden="true">▤</span> Purchase history';
     $("#checkout-open").innerHTML = signedInUser ? 'Review your request <span>↗</span>' : 'Create an account to order <span>↗</span>';
     $("#account-auth-view").hidden = Boolean(signedInUser);
     $("#account-dashboard").hidden = !signedInUser;
@@ -370,7 +376,15 @@
     $("#account-form").dataset.mode = mode;
     $("#account-status").textContent = "";
   }
-  $("#account-open").addEventListener("click", () => openAccount(signedInUser ? "signin" : "signup"));
+  const accountPopover = $("#account-popover");
+  function setAccountPopover(open) {
+    accountPopover.hidden = !open;
+    $("#account-open").setAttribute("aria-expanded", String(open));
+  }
+  $("#account-open").addEventListener("click", () => setAccountPopover(accountPopover.hidden));
+  $("#account-menu-auth").addEventListener("click", () => { setAccountPopover(false); openAccount(signedInUser ? "signin" : "signup"); });
+  $("#account-menu-history").addEventListener("click", () => { setAccountPopover(false); openAccount("signin"); });
+  document.addEventListener("click", event => { if (!event.target.closest(".account-menu-wrap")) setAccountPopover(false); });
   $("#maintenance-admin-open").addEventListener("click", () => openAccount("signin"));
   $("#account-close").addEventListener("click", closeAccount);
   $("#orders-refresh").addEventListener("click", loadOrderHistory);
@@ -426,7 +440,7 @@
   }
   renderAccountState(); setAuthMode("signup");
   loadMaintenanceMode();
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
 
   $("#order-form").addEventListener("submit", async e => {
