@@ -71,8 +71,11 @@ function doGet(e) {
           if (options.length === 2) return { color: options[0], size: options[1], price };
           const option = options[0] || "";
           const normalized = normalizeOption(option);
+          const isColor = colors.some(color => normalizeOption(color) === normalized);
           const isSize = sizes.some(size => normalizeOption(size) === normalized) || /\d\s*[x×*]\s*\d/i.test(option);
-          return { color: isSize ? "" : option, size: isSize ? option : "", price };
+          if (isColor) return { color: option, size: "", price };
+          if (isSize) return { color: "", size: option, price };
+          return { color: "", size: "", label: option, price };
         }).filter(Boolean);
         const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
         const photos = [...new Set([image, ...String(value("Additional Photos") || "").split(/[;\n]/)].map(photo => String(photo || "").trim()).filter(Boolean))];
@@ -113,7 +116,7 @@ function doPost(e) {
     const sheet = getTrikonicSpreadsheet_().getSheetByName(SHEET_NAME)
       || getTrikonicSpreadsheet_().insertSheet(SHEET_NAME);
     ensureOrderHeaders(sheet);
-    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.color ? ` [Color: ${item.color}]` : ""}${item.size ? ` [Size: ${item.size}]` : ""}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
+    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.color ? ` [Color: ${item.color}]` : ""}${item.size ? ` [Size: ${item.size}]` : ""}${item.variant ? ` [Option: ${item.variant}]` : ""}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
     const receivedAt = new Date();
     sheet.appendRow([
       receivedAt, receivedAt, order.orderId || "", order.customer?.name || "", order.customer?.contact || "",

@@ -27,17 +27,19 @@
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
   function parseCartKey(key) {
-    try { const parsed = JSON.parse(key); if (Array.isArray(parsed) && parsed.length === 3) return { id: String(parsed[0]), color: String(parsed[1] || ""), size: String(parsed[2] || "") }; } catch (_) {}
-    return { id: String(key), color: "", size: "" };
+    try { const parsed = JSON.parse(key); if (Array.isArray(parsed) && (parsed.length === 3 || parsed.length === 4)) return { id: String(parsed[0]), color: String(parsed[1] || ""), size: String(parsed[2] || ""), variant: String(parsed[3] || "") }; } catch (_) {}
+    return { id: String(key), color: "", size: "", variant: "" };
   }
-  function cartKey(id, color = "", size = "") { return color || size ? JSON.stringify([String(id), String(color), String(size)]) : String(id); }
+  function cartKey(id, color = "", size = "", variant = "") { return color || size || variant ? JSON.stringify([String(id), String(color), String(size), String(variant)]) : String(id); }
   function productForCartKey(key) { const { id } = parseCartKey(key); return products.find(item => item.id === id); }
   function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
+  function productVariantOptions(product) { return [...new Set((product?.variantPrices || []).map(option => String(option.label || "").trim()).filter(Boolean))]; }
   function regularPriceFor(product, selection = {}) {
     const prices = product?.variantPrices || [];
     const color = normalizeVariantOption(selection.color), size = normalizeVariantOption(selection.size);
     const find = (matchColor, matchSize) => prices.find(option => normalizeVariantOption(option.color) === matchColor && normalizeVariantOption(option.size) === matchSize);
-    const match = (color && size && find(color, size)) || (color && find(color, "")) || (size && find("", size));
+    const variant = normalizeVariantOption(selection.variant);
+    const match = (color && size && find(color, size)) || (variant && prices.find(option => normalizeVariantOption(option.label) === variant)) || (color && find(color, "")) || (size && find("", size));
     return Number(match?.price) || Number(product?.price) || 0;
   }
   function priceFor(product, selection = {}) {
@@ -50,13 +52,14 @@
     return onSale ? `<span class="sale-prices"><s>${money(regular)}</s><strong>${money(current)}</strong></span>` : `${prefix}<strong>${money(current)}</strong>`;
   }
   function productStartingPrice(product) {
-    const options = (product?.variantPrices || []).map(option => ({ color: option.color, size: option.size }));
+    const options = (product?.variantPrices || []).map(option => ({ color: option.color, size: option.size, variant: option.label }));
     const prices = [priceFor(product, {}).current, ...options.map(option => priceFor(product, option).current)].filter(price => price > 0);
     return Math.min(...prices);
   }
   function cartSelectionIsValid(product, selection) {
     const matches = (options, selected) => !options?.length || options.some(option => normalizeVariantOption(option) === normalizeVariantOption(selected));
-    return Boolean(product && matches(product.colors, selection.color) && matches(product.sizes, selection.size));
+    const variants = productVariantOptions(product);
+    return Boolean(product && matches(product.colors, selection.color) && matches(product.sizes, selection.size) && (!variants.length || variants.some(option => normalizeVariantOption(option) === normalizeVariantOption(selection.variant))));
   }
   function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify([...cart])); } catch (_) {} }
   function resolveProductImage(source) {
@@ -73,7 +76,7 @@
       return product ? { product, quantity, selection: parseCartKey(key) } : null;
     }).filter(Boolean);
     $(target).innerHTML = rows.length
-      ? rows.map(({ product, quantity, selection }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}${selection.color || selection.size ? `<small class="variant-summary">${[selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(priceFor(product, selection).current * quantity)}</strong></div>`).join("")
+      ? rows.map(({ product, quantity, selection }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}${selection.color || selection.size || selection.variant ? `<small class="variant-summary">${[selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`, selection.variant && `Option: ${selection.variant}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(priceFor(product, selection).current * quantity)}</strong></div>`).join("")
       : '<p class="receipt-empty">Your bag is empty.</p>';
     if (totalTarget) $(totalTarget).textContent = money(rows.reduce((sum, row) => sum + priceFor(row.product, row.selection).current * row.quantity, 0));
   }
@@ -118,7 +121,7 @@
     order.items.forEach(item => {
       const availability = item.availability === "preorder" ? " (PRE-ORDER)" : item.availability === "out_of_stock" ? " (OUT OF STOCK)" : "";
       const sale = item.flashSale ? " (FLASH SALE)" : "";
-      const options = [item.color && `Color: ${item.color}`, item.size && `Size: ${item.size}`].filter(Boolean).join(", ");
+      const options = [item.color && `Color: ${item.color}`, item.size && `Size: ${item.size}`, item.variant && `Option: ${item.variant}`].filter(Boolean).join(", ");
       write(`${item.quantity} x ${item.name}${options ? ` (${options})` : ""}${availability}${sale} - GHS ${(Number(item.lineTotal) || 0).toFixed(2)}`, 10, 8);
     });
     rule();
@@ -259,27 +262,30 @@
     // Saved selections can outlive a catalog refresh. This store submits requests
     // for manual confirmation, so stale variant labels must not block checkout.
     $("#checkout-open").disabled = hasOutOfStock;
-    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", badge = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = priceMarkup(p, selection); const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
+    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", badge = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = priceMarkup(p, selection); const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`, selection.variant && `Option: ${selection.variant}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
     renderCheckoutReceipt();
   }
   function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
   const detailBackdrop = $("#product-detail-backdrop");
-  let detailProduct = null, detailColor = "", detailSize = "";
+  let detailProduct = null, detailColor = "", detailSize = "", detailVariant = "";
   const swatchColors = { black:"#242424", white:"#fffefa", red:"#b52c2c", blue:"#325c9b", navy:"#162c49", "sky blue":"#9bc8df", teal:"#198b8b", green:"#5d8561", sage:"#a8b899", pink:"#e5a3ad", beige:"#d8c4a4", cream:"#eee8d8", brown:"#78513b", grey:"#9b9b98", gray:"#9b9b98", purple:"#8066a1", orange:"#df7c42", yellow:"#e9bf47" };
   function swatchFor(color) { const value = String(color || "").trim().toLowerCase(); if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value)) return value; const match = Object.keys(swatchColors).sort((a, b) => b.length - a.length).find(name => value === name || value.includes(name)); return match ? swatchColors[match] : "#d8d4ca"; }
   function renderDetailOptions() {
     if (!detailProduct) return;
     $("#detail-color-group").hidden = !detailProduct.colors?.length;
     $("#detail-size-group").hidden = !detailProduct.sizes?.length;
+    $("#detail-variant-group").hidden = !productVariantOptions(detailProduct).length;
     $("#detail-color-label").textContent = detailColor ? `Selected: ${detailColor}` : "Choose a colour";
     $("#detail-size-label").textContent = detailSize ? `Selected: ${detailSize}` : "Choose a size";
+    $("#detail-variant-label").textContent = detailVariant ? `Selected: ${detailVariant}` : "Choose an option";
     $("#detail-colors").innerHTML = (detailProduct.colors || []).map(color => `<button type="button" class="detail-swatch ${color === detailColor ? "selected" : ""}" style="--swatch:${swatchFor(color)}" data-detail-color="${escapeAttr(color)}" aria-label="${escapeAttr(color)}" aria-pressed="${color === detailColor}"><span class="visually-hidden">${escapeHtml(color)}</span></button>`).join("");
     $("#detail-sizes").innerHTML = (detailProduct.sizes || []).map(size => `<button type="button" class="detail-size ${size === detailSize ? "selected" : ""}" data-detail-size="${escapeAttr(size)}" aria-pressed="${size === detailSize}">${escapeHtml(size)}</button>`).join("");
-    const missingChoice = Boolean((detailProduct.colors?.length && !detailColor) || (detailProduct.sizes?.length && !detailSize));
+    $("#detail-variants").innerHTML = productVariantOptions(detailProduct).map(option => `<button type="button" class="detail-size ${option === detailVariant ? "selected" : ""}" data-detail-variant="${escapeAttr(option)}" aria-pressed="${option === detailVariant}">${escapeHtml(option)}</button>`).join("");
+    const missingChoice = Boolean((detailProduct.colors?.length && !detailColor) || (detailProduct.sizes?.length && !detailSize) || (productVariantOptions(detailProduct).length && !detailVariant));
     const unavailable = detailProduct.availability === "out_of_stock";
-    $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize });
+    $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     $("#detail-add").disabled = unavailable || missingChoice;
     $("#detail-purchase-status").textContent = unavailable ? "Currently out of stock" : missingChoice ? "Choose the available options to continue." : detailProduct.availability === "preorder" ? "Available for pre-order" : "In stock";
   }
@@ -287,6 +293,7 @@
     detailProduct = product;
     detailColor = "";
     detailSize = "";
+    detailVariant = "";
     const images = [...new Set((product.images?.length ? product.images : [product.image]).filter(Boolean))];
     const mainImage = images[0] || product.image;
     $("#detail-main-image").src = resolveProductImage(mainImage);
@@ -325,7 +332,8 @@
   });
   $("#detail-colors").addEventListener("click", event => { const button = event.target.closest("[data-detail-color]"); if (button) { detailColor = button.dataset.detailColor; renderDetailOptions(); } });
   $("#detail-sizes").addEventListener("click", event => { const button = event.target.closest("[data-detail-size]"); if (button) { detailSize = button.dataset.detailSize; renderDetailOptions(); } });
-  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize })) return; addProductToCart(detailProduct, detailColor, detailSize); closeProductDetail(); setDrawer(true); });
+  $("#detail-variants").addEventListener("click", event => { const button = event.target.closest("[data-detail-variant]"); if (button) { detailVariant = button.dataset.detailVariant; renderDetailOptions(); } });
+  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return; addProductToCart(detailProduct, detailColor, detailSize, detailVariant); closeProductDetail(); setDrawer(true); });
   const variantBackdrop = $("#variant-backdrop");
   let pendingVariantProduct = null;
   function fillVariantSelect(select, values, label) {
@@ -337,8 +345,10 @@
     $("#variant-product-name").textContent = product.name;
     $("#variant-color-field").hidden = !product.colors?.length;
     $("#variant-size-field").hidden = !product.sizes?.length;
+    $("#variant-option-field").hidden = !productVariantOptions(product).length;
     fillVariantSelect($("#variant-color"), product.colors || [], "colour");
     fillVariantSelect($("#variant-size"), product.sizes || [], "size");
+    fillVariantSelect($("#variant-option"), productVariantOptions(product), "option");
     $("#variant-status").textContent = "";
     updateVariantPickerPrice();
     variantBackdrop.classList.add("show");
@@ -347,7 +357,7 @@
   }
   function updateVariantPickerPrice() {
     if (!pendingVariantProduct) return;
-    const selection = { color: $("#variant-color").value, size: $("#variant-size").value };
+    const selection = { color: $("#variant-color").value, size: $("#variant-size").value, variant: $("#variant-option").value };
     const { regular, current, onSale } = priceFor(pendingVariantProduct, selection);
     $("#variant-product-name").textContent = `${pendingVariantProduct.name} · ${money(current)}${onSale ? ` (was ${money(regular)})` : ""}`;
   }
@@ -357,29 +367,30 @@
     document.body.classList.remove("no-scroll");
     pendingVariantProduct = null;
   }
-  function addProductToCart(product, color = "", size = "") {
-    const key = cartKey(product.id, color, size);
+  function addProductToCart(product, color = "", size = "", variant = "") {
+    const key = cartKey(product.id, color, size, variant);
     cart.set(key, (cart.get(key) || 0) + 1);
     saveCart(); renderCart();
   }
   $("#variant-close").addEventListener("click", closeVariantPicker);
   $("#variant-color").addEventListener("change", updateVariantPickerPrice);
   $("#variant-size").addEventListener("change", updateVariantPickerPrice);
+  $("#variant-option").addEventListener("change", updateVariantPickerPrice);
   variantBackdrop.addEventListener("click", event => { if (event.target === variantBackdrop) closeVariantPicker(); });
   $("#variant-form").addEventListener("submit", event => {
     event.preventDefault();
     if (!pendingVariantProduct) return;
-    const color = $("#variant-color").value, size = $("#variant-size").value;
-    if ((pendingVariantProduct.colors?.length && !color) || (pendingVariantProduct.sizes?.length && !size)) {
-      $("#variant-status").textContent = "Choose the available colour and size to continue.";
+    const color = $("#variant-color").value, size = $("#variant-size").value, variant = $("#variant-option").value;
+    if ((pendingVariantProduct.colors?.length && !color) || (pendingVariantProduct.sizes?.length && !size) || (productVariantOptions(pendingVariantProduct).length && !variant)) {
+      $("#variant-status").textContent = "Choose the available options to continue.";
       return;
     }
-    addProductToCart(pendingVariantProduct, color, size);
+    addProductToCart(pendingVariantProduct, color, size, variant);
     closeVariantPicker();
   });
   document.addEventListener("click", e => {
     const detail = e.target.closest("[data-detail]"); if (detail) { const product = products.find(p => p.id === detail.dataset.detail); if (product) openProductDetail(product); return; }
-    const add = e.target.closest("[data-add]"); if (add) { const product = products.find(p => p.id === add.dataset.add); if (!product || product.availability === "out_of_stock") return; if (product.colors?.length || product.sizes?.length) openVariantPicker(product); else addProductToCart(product); }
+    const add = e.target.closest("[data-add]"); if (add) { const product = products.find(p => p.id === add.dataset.add); if (!product || product.availability === "out_of_stock") return; if (product.colors?.length || product.sizes?.length || productVariantOptions(product).length) openVariantPicker(product); else addProductToCart(product); }
     const filter = e.target.closest("[data-category]"); if (filter) { category = filter.dataset.category; renderCategories(); renderProducts(); }
     const qty = e.target.closest("[data-qty]"); if (qty) { const product = productForCartKey(qty.dataset.qty); if (Number(qty.dataset.delta) > 0 && product?.availability === "out_of_stock") return; cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
@@ -746,7 +757,7 @@
     if (!signedInUser) { closeModal(); openAccount("signup"); $("#account-status").textContent = "Create an account or sign in first so you can place and track this order."; return; }
     if (!supabaseClient) { status.textContent = "Order tracking is temporarily unavailable. Please try again later."; return; }
     const form = new FormData(e.currentTarget);
-    const items = [...cart.entries()].filter(([, quantity]) => quantity > 0).map(([key, quantity]) => { const p = productForCartKey(key), selection = parseCartKey(key), pricing = p && priceFor(p, selection); return p ? { id: p.id, name: p.name, color: selection.color, size: selection.size, availability: p.availability, flashSale: pricing.onSale, quantity, unitPrice: pricing.current, originalUnitPrice: pricing.regular, lineTotal: pricing.current * quantity } : null; }).filter(Boolean);
+    const items = [...cart.entries()].filter(([, quantity]) => quantity > 0).map(([key, quantity]) => { const p = productForCartKey(key), selection = parseCartKey(key), pricing = p && priceFor(p, selection); return p ? { id: p.id, name: p.name, color: selection.color, size: selection.size, variant: selection.variant, availability: p.availability, flashSale: pricing.onSale, quantity, unitPrice: pricing.current, originalUnitPrice: pricing.regular, lineTotal: pricing.current * quantity } : null; }).filter(Boolean);
     if (items.some(item => item.availability === "out_of_stock")) { status.textContent = "Your bag contains an out-of-stock item. Remove it before sending your order."; return; }
     const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
     const endpoint = window.TRikonicOrderEndpoint || "";
