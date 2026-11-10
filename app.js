@@ -168,6 +168,8 @@
     if (productSort === "price-low") shown = shown.sort((a, b) => productStartingPrice(a) - productStartingPrice(b));
     else if (productSort === "price-high") shown = shown.sort((a, b) => productStartingPrice(b) - productStartingPrice(a));
     else if (productSort === "name") shown = shown.sort((a, b) => a.name.localeCompare(b.name));
+    const pageName = location.pathname.split("/").pop();
+    if (pageName === "" || pageName === "index.html") shown = shown.slice(0, 4);
     const resultCount = $("#product-result-count");
     if (resultCount) resultCount.textContent = `Showing ${shown.length} of ${products.length} products`;
     if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products in this category right now."}</p>`; return; }
@@ -182,9 +184,23 @@
     }).join("");
   }
   function renderCategories() {
-    if (catalogState === "loading" || catalogState === "error" || catalogState === "empty") { $("#categories").innerHTML = ""; return; }
-    const cats = ["All finds", ...new Set(products.map(p => p.category))];
-    $("#categories").innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
+    const categoryRow = $("#categories");
+    const homeCategoryGrid = $("#home-category-grid");
+    if (catalogState === "loading" || catalogState === "error" || catalogState === "empty") {
+      if (categoryRow) categoryRow.innerHTML = "";
+      if (homeCategoryGrid) homeCategoryGrid.innerHTML = "";
+      return;
+    }
+    const categories = [...new Set(products.map(product => product.category).filter(Boolean))];
+    if (categoryRow) {
+      const cats = ["All finds", ...categories];
+      categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
+    }
+    if (homeCategoryGrid) {
+      const accents = ["mint", "blue", "orange", "silver"];
+      const labels = ["Top picks", "Curated finds", "Worth a look", "New discoveries"];
+      homeCategoryGrid.innerHTML = categories.slice(0, 4).map((name, index) => `<a class="home-category-card ${accents[index % accents.length]}" href="shop.html?category=${encodeURIComponent(name)}"><span class="home-category-kicker">${labels[index % labels.length]}</span><strong>${escapeHtml(name)}</strong><span class="home-category-cta">Explore collection <b aria-hidden="true">↗</b></span></a>`).join("");
+    }
   }
   $("#product-search").value = searchTerm;
   $("#product-search").addEventListener("input", event => { searchTerm = event.currentTarget.value; renderProducts(); });
