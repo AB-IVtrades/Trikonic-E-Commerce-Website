@@ -78,7 +78,7 @@ function doGet(e) {
           return { color: "", size: "", label: option, price };
         }).filter(Boolean);
         const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
-        const photos = [...new Set([image, ...String(value("Additional Photos") || "").split(/[;\n]/)].map(photo => String(photo || "").trim()).filter(Boolean))];
+        const photos = [...new Set([image, ...String(value("Additional Photos") || "").split(/[;,\r\n]+/)].map(photo => String(photo || "").trim()).filter(Boolean))];
         const specs = String(value("Product Specs") || "").split(/[;\n]/).map(line => {
           const separator = line.indexOf(":");
           return separator > 0 ? { name: line.slice(0, separator).trim(), value: line.slice(separator + 1).trim() } : null;
