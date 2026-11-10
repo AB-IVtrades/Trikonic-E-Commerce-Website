@@ -1,2 +1,5 @@
 [functions.order-status-sync]
 verify_jwt = false
+
+[functions.customer-cancel-order]
+verify_jwt = true
