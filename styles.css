@@ -209,3 +209,35 @@ body.mobile-nav-open{overflow:hidden}
 .brand-mark{flex:0 0 auto}
 .shop-page > .page-banner{background:var(--orange)}
 .shop-page > .page-banner :is(.page-kicker,p){color:var(--ink)}
+
+.categories-page > .page-banner,
+:is(.shop-page,.categories-page) .results-toolbar,
+.shop-sidebar,
+.category-page-sidebar {
+  background:var(--ink);
+  border-color:var(--ink);
+  color:var(--white);
+}
+.categories-page > .page-banner :is(.page-kicker,p),
+:is(.shop-page,.categories-page) .results-toolbar :is(.eyebrow,p,.sort-control),
+.shop-sidebar :is(h2,label,.price-range-labels),
+.category-page-sidebar :is(h2,p),
+:is(.shop-sidebar,.category-page-sidebar) .category-chip {
+  color:var(--white);
+}
+:is(.shop-sidebar,.category-page-sidebar) .category-chip:hover {
+  background:#0b426b;
+}
+:is(.shop-sidebar,.category-page-sidebar) .category-chip.active {
+  background:var(--orange);
+  color:var(--ink);
+}
+:is(.shop-sidebar,.category-page-sidebar) .category-chip span{color:inherit}
+:is(.shop-sidebar,.category-page-sidebar) .category-chip:focus-visible,
+:is(.shop-page,.categories-page) .sort-control select:focus-visible {
+  outline:2px solid var(--orange);
+  outline-offset:2px;
+}
+.shop-sidebar hr{background:rgba(255,255,255,.3)}
+.shop-sidebar input[type=range]{accent-color:var(--orange)}
+:is(.shop-page,.categories-page) .sort-control select{border-color:var(--line)}
