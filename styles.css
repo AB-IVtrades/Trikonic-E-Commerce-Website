@@ -207,3 +207,5 @@ body.mobile-nav-open{overflow:hidden}
 /* Trikonic palette update: blue wordmark accent and import-route logo mark. */
 .site-header .brand-light{color:#159bd0}
 .brand-mark{flex:0 0 auto}
+.shop-page > .page-banner{background:var(--orange)}
+.shop-page > .page-banner :is(.page-kicker,p){color:var(--ink)}
