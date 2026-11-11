@@ -14,6 +14,10 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="availability.css">
+  <script type="module">
+    import { inject } from 'https://cdn.jsdelivr.net/npm/@vercel/analytics@1/dist/index.js';
+    inject();
+  </script>
 </head>
 <body>
   <section class="maintenance-screen" id="maintenance-screen" hidden aria-live="polite"><div class="maintenance-card"><a class="brand" href="/" aria-label="Trikonic Imports"><img class="brand-mark" src="images/trikonic-logo.svg" alt=""><span>trikonic<span class="brand-light"> imports</span></span></a><span class="eyebrow">A LITTLE PAUSE</span><h1>The shop is <em>temporarily closed.</em></h1><p>We’re updating the collection right now. Please check back soon.</p><button class="text-link" id="maintenance-admin-open" type="button">Store admin sign in ↗</button></div></section>
