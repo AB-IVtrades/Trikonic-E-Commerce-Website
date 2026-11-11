@@ -238,6 +238,9 @@ body.mobile-nav-open{overflow:hidden}
 .home-benefits strong, .home-benefits small { display: block; font-size: 12px; }
 .home-benefits small { margin-top: 3px; color: #4e6173; }
 .clear-shop-collection { display: inline-block; margin-top: 5px; color: inherit; font-size: 12px; text-decoration: underline; }
+.shop-product-enquiry { margin: -8px 0 20px; color: var(--ink); font-size: 14px; line-height: 1.6; }
+.shop-product-enquiry a { display: inline-block; margin-inline-start: .25em; font-weight: 700; text-decoration: underline; text-underline-offset: .2em; }
+.shop-product-enquiry a:hover { text-decoration-thickness: 2px; }
 
 @media (max-width: 900px) {
   .home-category-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
