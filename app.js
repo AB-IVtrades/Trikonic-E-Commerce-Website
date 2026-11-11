@@ -200,9 +200,8 @@
       categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
     }
     if (homeCategoryGrid) {
-      const accents = ["mint", "blue", "orange", "silver"];
       const labels = ["Top picks", "Curated finds", "Worth a look", "New discoveries"];
-      homeCategoryGrid.innerHTML = categories.slice(0, 4).map((name, index) => `<a class="home-category-card ${accents[index % accents.length]}" href="shop.html?category=${encodeURIComponent(name)}"><span class="home-category-kicker">${labels[index % labels.length]}</span><strong>${escapeHtml(name)}</strong><span class="home-category-cta">Explore collection <b aria-hidden="true">↗</b></span></a>`).join("");
+      homeCategoryGrid.innerHTML = categories.slice(0, 4).map((name, index) => `<a class="home-category-card" href="shop.html?category=${encodeURIComponent(name)}"><span class="home-category-kicker">${labels[index % labels.length]}</span><strong>${escapeHtml(name)}</strong><span class="home-category-cta">Explore collection <b aria-hidden="true">↗</b></span></a>`).join("");
     }
   }
   $("#product-search").value = searchTerm;

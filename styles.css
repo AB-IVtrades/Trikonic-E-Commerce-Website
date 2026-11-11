@@ -134,16 +134,12 @@ body.mobile-nav-open{overflow:hidden}
 .home-section-link span{color:var(--green);font-size:16px;transition:transform .18s}
 .home-section-link:hover span{transform:translate(2px,-2px)}
 .home-category-grid{max-width:1376px;margin:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
-.home-category-card{min-height:150px;padding:19px 20px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:14px;border:1px solid #dce5eb;border-radius:13px;background:linear-gradient(120deg,#f5f8fa 0%,#eaf5f9 100%);transition:transform .2s,box-shadow .2s,border-color .2s}
+.home-category-card{min-height:150px;padding:19px 20px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:14px;border:1px solid #dce5eb;border-radius:13px;background:var(--ink);color:var(--white);transition:transform .2s,box-shadow .2s,border-color .2s}
 .home-category-card:hover{transform:translateY(-3px);border-color:#a9cfdf;box-shadow:0 10px 24px rgba(11,49,84,.08)}
-.home-category-card.mint{background:linear-gradient(115deg,#f5faf8 0%,#dff1e9 100%)}
-.home-category-card.blue{background:linear-gradient(115deg,#f5f9fb 0%,#d9eff7 100%)}
-.home-category-card.orange{background:linear-gradient(115deg,#fff9f3 0%,#ffebd9 100%)}
-.home-category-card.silver{background:linear-gradient(115deg,#f7f8f9 0%,#e2e7eb 100%)}
-.home-category-kicker{color:#537087;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
-.home-category-card strong{color:var(--ink);font:700 clamp(17px,1.65vw,23px)/1.15 var(--display);letter-spacing:-.035em}
-.home-category-cta{display:flex;align-items:center;gap:8px;color:#476175;font-size:10px;font-weight:600}
-.home-category-cta b{color:var(--green);font-size:15px;font-weight:500}
+.home-category-kicker{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.home-category-card strong{font:700 clamp(17px,1.65vw,23px)/1.15 var(--display);letter-spacing:-.035em}
+.home-category-cta{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:600}
+.home-category-cta b{color:var(--orange);font-size:15px;font-weight:500}
 .shop-section .section-heading .home-section-link{margin-bottom:8px}
 @media(max-width:900px){.home-category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.home-categories{padding:42px 5%}.home-section-heading{align-items:flex-start;flex-direction:column;gap:14px;margin-bottom:18px}.home-section-heading h2{font-size:29px}.home-category-grid{gap:10px}.home-category-card{min-height:132px;padding:15px;border-radius:10px}.home-category-card strong{font-size:17px}.shop-section .section-heading{align-items:flex-start;gap:14px;flex-direction:column}.shop-section .section-heading h2{font-size:31px}.shop-section .section-heading .home-section-link{margin:0}}
@@ -241,7 +237,6 @@ body.mobile-nav-open{overflow:hidden}
 :is(.shop-page,.categories-page) .sort-control select{border-color:var(--line)}
 
 .page-main:not(.shop-page) > .page-banner,
-.home-category-card:is(.mint,.blue,.silver),
 .ordering-details .payment-info,
 .team-section,
 .newsletter {
@@ -249,17 +244,14 @@ body.mobile-nav-open{overflow:hidden}
   color:var(--white);
 }
 .page-main:not(.shop-page) > .page-banner :is(h1,p,.page-kicker,.ordering-trust),
-.home-category-card:is(.mint,.blue,.silver) :is(strong,.home-category-kicker,.home-category-cta),
 .ordering-details .payment-info :is(h2,p,.eyebrow),
 .team-heading :is(h2,p,.eyebrow),
 .newsletter :is(p,.eyebrow) {
   color:var(--white);
 }
-.home-category-card:is(.mint,.blue,.silver) .home-category-cta b,
 .ordering-trust span::first-letter {
   color:var(--orange);
 }
-.home-category-card.orange,
 .hero-shop-button,
 .ordering-hero .button,
 .ordering-steps article > span,
@@ -272,7 +264,6 @@ body.mobile-nav-open{overflow:hidden}
   background:var(--orange);
   color:var(--ink);
 }
-.home-category-card.orange :is(strong,.home-category-kicker,.home-category-cta,b),
 .contact-message :is(h2,p),
 .community-strip :is(h2,.eyebrow) {
   color:var(--ink);
