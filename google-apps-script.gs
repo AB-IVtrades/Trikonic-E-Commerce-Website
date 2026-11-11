@@ -5,6 +5,7 @@
  */
 const SHEET_NAME = "Trikonic Orders";
 const CATALOG_SHEET_NAME = "Website Catalog";
+const STOCK_QUANTITY_HEADER = "Stock Quantity";
 const SPREADSHEET_ID = "1LDHrm-o9rVYudKTlaA8Jot8F3cMN2Wl1d3hiz7ohvVc";
 const STATUS_SYNC_URL = "https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync";
 const STATUS_SYNC_PROPERTY = "TRIKONIC_STATUS_SYNC_TOKEN";
@@ -52,7 +53,9 @@ function doGet(e) {
         const product = inventory.get(String(sku || "").trim());
         if (!isVisible || !product || !image) return;
         const availabilityValue = String(rawAvailability || "in_stock").trim().toLowerCase().replace(/[\s_-]/g, "");
-        const availability = availabilityValue === "preorder" ? "preorder" : availabilityValue === "outofstock" ? "out_of_stock" : "in_stock";
+        const rawStockQuantity = value(STOCK_QUANTITY_HEADER);
+        const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
+        const availability = availabilityValue === "preorder" ? "preorder" : availabilityValue === "outofstock" || stockQuantity === 0 ? "out_of_stock" : "in_stock";
         const flashValue = value("Flash Sale");
         const flashSaleRequested = flashValue === true || ["true", "yes", "1", "active"].includes(String(flashValue).trim().toLowerCase());
         const rawSalePrice = value("Sale Price (GHS)");
@@ -88,6 +91,7 @@ function doGet(e) {
           id: String(sku).trim(), name: product.name, category: product.category,
           price: product.price, originalPrice: product.price, salePrice: flashSale ? salePrice : null, flashSale,
           description: String(description || "").trim(), image: String(image).trim(), images: photos, specs, availability,
+          stockQuantity: availability === "in_stock" ? stockQuantity : null,
           colors, sizes, variantPrices,
           tag: String(tag || "").trim(), color: safeColor
         });
@@ -201,7 +205,7 @@ function cancelOrderInSheet(payload) {
   }
 }
 
-// Run once to add variant/sale columns and refresh catalog dropdowns.
+// Run once to add missing catalog columns and refresh validation rules.
 function setupTrikonicCatalogSheet() {
   const spreadsheet = getTrikonicSpreadsheet_();
   const sheet = spreadsheet.getSheetByName(CATALOG_SHEET_NAME) || spreadsheet.insertSheet(CATALOG_SHEET_NAME);
@@ -213,6 +217,7 @@ function setupTrikonicCatalogSheet() {
   const colorsColumn = headers.indexOf("available colors") + 1;
   const sizesColumn = headers.indexOf("available sizes") + 1;
   const variantPricesColumn = headers.indexOf("variant prices (ghs)") + 1;
+  const stockQuantityColumn = headers.indexOf(STOCK_QUANTITY_HEADER.toLowerCase()) + 1;
   const rows = Math.max(sheet.getMaxRows() - 1, 1);
   sheet.getRange(2, availabilityColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(["In Stock", "Pre-Order", "Out of Stock"], true).setAllowInvalid(false).build()
@@ -222,6 +227,14 @@ function setupTrikonicCatalogSheet() {
   );
   sheet.getRange(2, salePriceColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireNumberGreaterThan(0).setAllowInvalid(false).build()
+  );
+  const stockCell = sheet.getRange(2, stockQuantityColumn).getA1Notation();
+  sheet.getRange(2, stockQuantityColumn, rows, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation()
+      .requireFormulaSatisfied(`=OR(ISBLANK(${stockCell}),AND(ISNUMBER(${stockCell}),${stockCell}>=0,MOD(${stockCell},1)=0))`)
+      .setAllowInvalid(false)
+      .setHelpText("Enter a whole number of units, or leave the cell blank.")
+      .build()
   );
   // These are free-text, comma-separated option lists. Clear any dropdown rules
   // inherited when the new columns were created or copied from another column.
@@ -236,7 +249,7 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs"].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextColumn).setValue(header);

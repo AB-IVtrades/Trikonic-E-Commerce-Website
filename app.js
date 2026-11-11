@@ -32,6 +32,10 @@
   }
   function cartKey(id, color = "", size = "", variant = "") { return color || size || variant ? JSON.stringify([String(id), String(color), String(size), String(variant)]) : String(id); }
   function productForCartKey(key) { const { id } = parseCartKey(key); return products.find(item => item.id === id); }
+  function inStockLabel(product) {
+    const quantity = product.stockQuantity;
+    return Number.isSafeInteger(quantity) && quantity > 0 ? `${quantity} in stock` : "In stock";
+  }
   function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
   function productVariantOptions(product) { return [...new Set((product?.variantPrices || []).map(option => String(option.label || "").trim()).filter(Boolean))]; }
   function regularPriceFor(product, selection = {}) {
@@ -179,7 +183,7 @@
     grid.innerHTML = shown.map(p => {
       const preorder = p.availability === "preorder";
       const outOfStock = p.availability === "out_of_stock";
-      const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK";
+      const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : inStockLabel(p).toUpperCase();
       const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
       const startPrice = productStartingPrice(p);
       const price = p.flashSale && startPrice < p.price ? `<span class="sale-prices"><s>${money(p.price)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
@@ -374,7 +378,7 @@
     const unavailable = detailProduct.availability === "out_of_stock";
     $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     $("#detail-add").disabled = unavailable || missingChoice;
-    $("#detail-purchase-status").textContent = unavailable ? "Currently out of stock" : missingChoice ? "Choose the available options to continue." : detailProduct.availability === "preorder" ? "Available for pre-order" : "In stock";
+    $("#detail-purchase-status").textContent = missingChoice && !unavailable ? "Choose the available options to continue." : $("#detail-availability").textContent;
   }
   function openProductDetail(product) {
     detailProduct = product;
@@ -389,7 +393,7 @@
     $("#detail-category").textContent = product.category || "Trikonic find";
     $("#detail-name").textContent = product.name;
     $("#detail-description").textContent = product.description || "Thoughtfully selected and ready to make yours.";
-    const availability = product.availability === "preorder" ? "Available for pre-order" : product.availability === "out_of_stock" ? "Currently out of stock" : "In stock";
+    const availability = product.availability === "preorder" ? "Available for pre-order" : product.availability === "out_of_stock" ? "Currently out of stock" : inStockLabel(product);
     $("#detail-availability").textContent = availability;
     $("#detail-availability").className = `detail-availability ${product.availability === "preorder" ? "preorder" : product.availability === "out_of_stock" ? "out-of-stock" : "in-stock"}`;
     $("#detail-price").innerHTML = priceMarkup(product);
