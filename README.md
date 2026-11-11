@@ -42,8 +42,9 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 
 - `Description`: the text customers see.
 - `Photo URL`: a publicly accessible image URL, or a repository path such as `images/raffia-tote.webp`.
-- `Availability`: choose `In Stock`, `Pre-Order`, or `Out of Stock` from the dropdown. Out-of-stock items remain visible but cannot be added to the bag, and an already-saved bag must have those items removed before checkout.
+- `Availability`: choose `In Stock`, `Pre-Order`, or `Out of Stock` from the dropdown. Out-of-stock items remain visible but cannot be added to the bag, and customers can deselect or remove those items from their cart before checkout.
 - `Stock Quantity`: enter the total number of units across all colours and sizes for an in-stock product. For example, enter `8` to show “8 in stock” on the product card and detail view. Enter `0` to show “Out of stock”, or leave the cell blank to show “In stock” without a number. Pre-order items continue to show “Pre-order”. Update the count in the sheet as stock changes.
+- `Shipping Fee (GHS)`: optional rate per unit. Leave it blank if shipping is included in the product price.
 - `Tag` and `Card Color`: optional display styling; card color can be a hex value such as `#e5dcd0`.
 - `Show on website`: enter `TRUE` to publish that row or `FALSE` to hide it.
 - `Flash Sale`: choose `TRUE` while the item should be discounted; choose `FALSE` (or leave it off) to show its regular price.
@@ -57,7 +58,7 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 
 Clicking a product photo or name opens its detail view with a gallery, colour and size selectors, specifications, availability, and the add-to-bag action. Customers must explicitly choose each option that applies before adding the item, so the first colour or size is not silently assumed. The displayed price updates to reflect the chosen variant.
 
-After updating `google-apps-script.gs` in the spreadsheet’s **Extensions → Apps Script**, save it and run `setupTrikonicCatalogSheet` once. This adds missing catalog columns, including `Stock Quantity`, and refreshes the validation rules. Then redeploy the existing Web App as a **New version** so the storefront starts reading these fields. The Web App URL stays the same.
+After updating `google-apps-script.gs` in the spreadsheet’s **Extensions → Apps Script**, save it and run `setupTrikonicCatalogSheet` once. This adds missing catalog columns, including `Stock Quantity` and `Shipping Fee (GHS)`, and refreshes the validation rules. Then redeploy the existing Web App as a **New version** so the storefront starts reading these fields. The Web App URL stays the same.
 
 Only rows marked `TRUE` with a matching SKU and photo are sent to the storefront. Change prices and product names in the existing blue editable columns of the `Products` tab. Update photos, descriptions, availability, public stock quantities, and visibility in `Website Catalog`. The catalog feed keeps internal inventory, profit, and order data private. Refresh the site after edits.
 
@@ -67,7 +68,7 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Shipping is paid separately and is excluded from the item subtotal.
+Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. A rate in the Website Catalog’s `Shipping Fee (GHS)` column is charged per unit and shown separately before payment. Leave it blank for products whose existing prices already include shipping. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
 
 To connect the order form and product catalog to the existing Sheet:
 

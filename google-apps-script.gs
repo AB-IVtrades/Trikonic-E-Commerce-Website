@@ -6,6 +6,7 @@
 const SHEET_NAME = "Trikonic Orders";
 const CATALOG_SHEET_NAME = "Website Catalog";
 const STOCK_QUANTITY_HEADER = "Stock Quantity";
+const SHIPPING_FEE_HEADER = "Shipping Fee (GHS)";
 const SPREADSHEET_ID = "1LDHrm-o9rVYudKTlaA8Jot8F3cMN2Wl1d3hiz7ohvVc";
 const STATUS_SYNC_URL = "https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync";
 const STATUS_SYNC_PROPERTY = "TRIKONIC_STATUS_SYNC_TOKEN";
@@ -56,6 +57,10 @@ function doGet(e) {
         const rawStockQuantity = value(STOCK_QUANTITY_HEADER);
         const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
         const availability = availabilityValue === "preorder" ? "preorder" : availabilityValue === "outofstock" || stockQuantity === 0 ? "out_of_stock" : "in_stock";
+        const rawShippingFee = value(SHIPPING_FEE_HEADER);
+        const shippingFee = typeof rawShippingFee === "number" && Number.isFinite(rawShippingFee) && rawShippingFee >= 0
+          ? Math.round(rawShippingFee * 100) / 100
+          : null;
         const flashValue = value("Flash Sale");
         const flashSaleRequested = flashValue === true || ["true", "yes", "1", "active"].includes(String(flashValue).trim().toLowerCase());
         const rawSalePrice = value("Sale Price (GHS)");
@@ -92,7 +97,7 @@ function doGet(e) {
           price: product.price, originalPrice: product.price, salePrice: flashSale ? salePrice : null, flashSale,
           description: String(description || "").trim(), image: String(image).trim(), images: photos, specs, availability,
           stockQuantity: availability === "in_stock" ? stockQuantity : null,
-          colors, sizes, variantPrices,
+          colors, sizes, variantPrices, shippingFee,
           tag: String(tag || "").trim(), color: safeColor
         });
       });
@@ -122,13 +127,22 @@ function doPost(e) {
     ensureOrderHeaders(sheet);
     const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.color ? ` [Color: ${item.color}]` : ""}${item.size ? ` [Size: ${item.size}]` : ""}${item.variant ? ` [Option: ${item.variant}]` : ""}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
     const receivedAt = new Date();
-    sheet.appendRow([
+    const orderRow = [
       receivedAt, receivedAt, order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
       order.customer?.location || "", items, Number(order.estimatedTotal || 0), order.customer?.notes || "", "Order Received"
-    ]);
-    const row = sheet.getLastRow();
-    sheet.getRange(row, 1).setNumberFormat("dd mmm yyyy");
-    sheet.getRange(row, 2).setNumberFormat("hh:mm:ss AM/PM");
+    ];
+    if (typeof order.shippingTotal === "number" && Number.isFinite(order.shippingTotal) && order.shippingTotal >= 0) {
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const shippingColumn = headers.includes(SHIPPING_FEE_HEADER) ? headers.indexOf(SHIPPING_FEE_HEADER) + 1 : headers.length + 1;
+      if (shippingColumn > headers.length) {
+        if (shippingColumn > sheet.getMaxColumns()) sheet.insertColumnAfter(sheet.getMaxColumns());
+        sheet.getRange(1, shippingColumn).setValue(SHIPPING_FEE_HEADER);
+        sheet.getRange(2, shippingColumn, sheet.getMaxRows() - 1, 1).setNumberFormat("0.00");
+      }
+      while (orderRow.length < shippingColumn) orderRow.push("");
+      orderRow[shippingColumn - 1] = order.shippingTotal;
+    }
+    sheet.appendRow(orderRow);
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(error) })).setMimeType(ContentService.MimeType.JSON);
@@ -217,6 +231,7 @@ function setupTrikonicCatalogSheet() {
   const colorsColumn = headers.indexOf("available colors") + 1;
   const sizesColumn = headers.indexOf("available sizes") + 1;
   const variantPricesColumn = headers.indexOf("variant prices (ghs)") + 1;
+  const shippingColumn = headers.indexOf(SHIPPING_FEE_HEADER.toLowerCase()) + 1;
   const stockQuantityColumn = headers.indexOf(STOCK_QUANTITY_HEADER.toLowerCase()) + 1;
   const rows = Math.max(sheet.getMaxRows() - 1, 1);
   sheet.getRange(2, availabilityColumn, rows, 1).setDataValidation(
@@ -227,6 +242,13 @@ function setupTrikonicCatalogSheet() {
   );
   sheet.getRange(2, salePriceColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireNumberGreaterThan(0).setAllowInvalid(false).build()
+  );
+  sheet.getRange(2, shippingColumn, rows, 1).setNumberFormat("0.00").setDataValidation(
+    SpreadsheetApp.newDataValidation()
+      .requireNumberGreaterThanOrEqualTo(0)
+      .setAllowInvalid(false)
+      .setHelpText("Enter shipping per unit in GHS. Leave blank if shipping is included in the item price.")
+      .build()
   );
   const stockCell = sheet.getRange(2, stockQuantityColumn).getA1Notation();
   sheet.getRange(2, stockQuantityColumn, rows, 1).setDataValidation(
@@ -249,7 +271,7 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER, SHIPPING_FEE_HEADER].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextColumn).setValue(header);

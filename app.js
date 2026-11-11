@@ -20,12 +20,18 @@
     const storedCart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
     if (Array.isArray(storedCart)) cart = new Map(storedCart.filter(row => Array.isArray(row) && row.length === 2 && Number(row[1]) > 0).map(([id, quantity]) => [String(id), Number(quantity)]));
   } catch (_) { cart = new Map(); }
+  const excludedCartKey = "trikonic-cart-excluded";
+  let excludedCartItems = new Set();
+  try {
+    excludedCartItems = new Set(JSON.parse(sessionStorage.getItem(excludedCartKey) || "[]"));
+  } catch (_) {}
   let category = new URLSearchParams(location.search).get("category") || "All finds";
   let searchTerm = new URLSearchParams(location.search).get("search") || "";
   let maxPriceFilter = Number.POSITIVE_INFINITY;
   let productSort = "recommended";
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
+  const cartPage = $("#cart-page");
   const homeMore = $("#home-more-products");
   const collection = new URLSearchParams(location.search).get("collection");
   const collectionLabel = { "in-stock": "In stock", preorder: "Pre-orders", sale: "Flash sale" };
@@ -68,7 +74,42 @@
     const variants = productVariantOptions(product);
     return Boolean(product && matches(product.colors, selection.color) && matches(product.sizes, selection.size) && (!variants.length || variants.some(option => normalizeVariantOption(option) === normalizeVariantOption(selection.variant))));
   }
-  function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify([...cart])); } catch (_) {} }
+  function saveCart() {
+    const entries = [...cart].filter(([, quantity]) => quantity > 0);
+    try { localStorage.setItem(CART_KEY, JSON.stringify(entries)); } catch (_) {}
+    saveCartSelection();
+  }
+  function saveCartSelection() {
+    excludedCartItems = new Set([...excludedCartItems].filter(key => cart.get(key) > 0));
+    try { sessionStorage.setItem(excludedCartKey, JSON.stringify([...excludedCartItems])); } catch (_) {}
+  }
+  function selectedCartKeys() {
+    return [...cart.keys()].filter(key => cart.get(key) > 0 && !excludedCartItems.has(key));
+  }
+  function cartOrderItems(keys) {
+    return keys.map(key => {
+      const product = productForCartKey(key);
+      if (!product) return null;
+      const { color, size, variant } = parseCartKey(key);
+      const { current, regular, onSale } = priceFor(product, { color, size, variant });
+      const quantity = cart.get(key);
+      const shippingRate = product.shippingFee == null ? null : Number(product.shippingFee);
+      return {
+        id: product.id, name: product.name, color, size, variant, availability: product.availability,
+        flashSale: onSale, quantity, unitPrice: current, originalUnitPrice: regular,
+        lineTotal: Math.round(current * 100) * quantity / 100,
+        shippingTotal: Number.isFinite(shippingRate) && shippingRate >= 0 ? Math.round(shippingRate * 100) * quantity / 100 : null
+      };
+    }).filter(Boolean);
+  }
+  function orderTotals(items) {
+    const subtotal = items.reduce((sum, item) => sum + Math.round(item.lineTotal * 100), 0);
+    const shipping = items.reduce((sum, item) => sum + Math.round((item.shippingTotal || 0) * 100), 0);
+    return { subtotal: subtotal / 100, shipping: shipping / 100, total: (subtotal + shipping) / 100 };
+  }
+  function shippingLabel(items, amount) {
+    return items.length && items.every(item => item.shippingTotal == null) ? "Included" : money(amount);
+  }
   function resolveProductImage(source) {
     const image = String(source || "").trim();
     if (!image) return "";
@@ -77,15 +118,16 @@
     return path.includes("/") ? path : `images/${path}`;
   }
   let savedReceiptOrder = null;
-  function renderCheckoutReceipt(target = "#checkout-receipt-items", totalTarget = "#checkout-total") {
-    const rows = [...cart.entries()].filter(([, qty]) => qty > 0).map(([key, quantity]) => {
-      const product = productForCartKey(key);
-      return product ? { product, quantity, selection: parseCartKey(key) } : null;
-    }).filter(Boolean);
-    $(target).innerHTML = rows.length
-      ? rows.map(({ product, quantity, selection }) => `<div class="receipt-line"><span>${quantity} × ${escapeHtml(product.name)}${selection.color || selection.size || selection.variant ? `<small class="variant-summary">${[selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`, selection.variant && `Option: ${selection.variant}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(priceFor(product, selection).current * quantity)}</strong></div>`).join("")
-      : '<p class="receipt-empty">Your bag is empty.</p>';
-    if (totalTarget) $(totalTarget).textContent = money(rows.reduce((sum, row) => sum + priceFor(row.product, row.selection).current * row.quantity, 0));
+  function renderCheckoutReceipt(items, target = "#checkout-receipt-items", totalTarget = "#checkout-total") {
+    const { subtotal, shipping, total } = orderTotals(items);
+    const rows = items.map(item => {
+      const options = [item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`, item.variant && `Option: ${item.variant}`].filter(Boolean);
+      return `<div class="receipt-line"><span>${item.quantity} × ${escapeHtml(item.name)}${options.length ? `<small class="variant-summary">${options.map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(item.lineTotal)}</strong></div>`;
+    });
+    rows.push(`<div class="receipt-line"><span>Items subtotal</span><strong>${money(subtotal)}</strong></div>`);
+    rows.push(`<div class="receipt-line"><span>Shipping</span><strong>${shippingLabel(items, shipping)}</strong></div>`);
+    $(target).innerHTML = rows.join("");
+    $(totalTarget).textContent = money(total);
   }
 
   function downloadReceiptPdf(order) {
@@ -132,8 +174,10 @@
       write(`${item.quantity} x ${item.name}${options ? ` (${options})` : ""}${availability}${sale} - GHS ${(Number(item.lineTotal) || 0).toFixed(2)}`, 10, 8);
     });
     rule();
-    write(`Order total (shipping included): GHS ${Number(order.estimatedTotal).toFixed(2)}`, 12);
-    write("Shipping is included in the displayed product prices and order total.");
+    const { subtotal, shipping } = orderTotals(order.items);
+    write(`Items subtotal: GHS ${subtotal.toFixed(2)}`);
+    write(order.items.some(item => item.shippingTotal != null) ? `Shipping: GHS ${shipping.toFixed(2)}` : "Shipping: Included");
+    write(`Order total: GHS ${Number(order.estimatedTotal).toFixed(2)}`, 12);
     rule();
     write("Order summary. Payment must be confirmed separately by Paystack.", 9);
 
@@ -170,6 +214,7 @@
   }
 
   function renderProducts() {
+    if (!grid) return;
     if (homeMore) homeMore.hidden = true;
     if (catalogState === "loading") { grid.innerHTML = '<p class="catalog-message">Loading the latest finds…</p>'; return; }
     if (catalogState === "error") { grid.innerHTML = '<p class="catalog-message">We couldn’t load the catalog right now. Please refresh in a moment.</p>'; return; }
@@ -275,24 +320,65 @@
     if (link.getAttribute("href") === currentPage) link.setAttribute("aria-current", "page");
     link.addEventListener("click", () => setMobileNav(false));
   });
-  $("#mobile-account-open")?.addEventListener("click", () => { setMobileNav(false); openAccount(signedInUser ? "signin" : "signup"); });
+  $("#mobile-account-open")?.addEventListener("click", () => { setMobileNav(false); showProfile(); });
   function renderCart() {
-    const entries = [...cart.entries()].filter(([key, qty]) => qty > 0 && productForCartKey(key));
-    const count = entries.reduce((s, [, q]) => s + q, 0);
-    const total = entries.reduce((s, [key, q]) => { const p = productForCartKey(key); return s + (p ? priceFor(p, parseCartKey(key)).current : 0) * q; }, 0);
-    $("#cart-count").textContent = count; $("#drawer-count").textContent = `(${count})`;
-    $("#subtotal").textContent = money(total); $("#checkout-total").textContent = money(total);
-    $("#cart-empty").hidden = count > 0; $("#cart-bottom").hidden = count === 0;
-    const hasOutOfStock = entries.some(([key]) => productForCartKey(key)?.availability === "out_of_stock");
-    $("#cart-stock-warning").hidden = !hasOutOfStock;
-    $("#cart-stock-warning").textContent = "Remove out-of-stock items before continuing.";
-    // Saved selections can outlive a catalog refresh. This store submits requests
-    // for manual confirmation, so stale variant labels must not block checkout.
-    $("#checkout-open").disabled = hasOutOfStock;
-    $("#cart-items").innerHTML = entries.map(([key, qty]) => { const p = productForCartKey(key), selection = parseCartKey(key); const preorder = p.availability === "preorder", outOfStock = p.availability === "out_of_stock", badge = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : "IN STOCK"; const price = priceMarkup(p, selection); const options = [selection.color && `Colour: ${selection.color}`, selection.size && `Size: ${selection.size}`, selection.variant && `Option: ${selection.variant}`].filter(Boolean).map(escapeHtml).join(" · "); return `<article class="cart-item"><img src="${escapeAttr(resolveProductImage(p.image))}" alt=""><div class="cart-item-info"><span>${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3>${options ? `<small class="cart-variant-summary">${options}</small>` : ""}<span class="cart-availability ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${badge}</span>${price}<div class="quantity"><button data-qty="${escapeAttr(key)}" data-delta="-1" aria-label="Remove one ${escapeAttr(p.name)}">−</button><span>${qty}</span><button data-qty="${escapeAttr(key)}" data-delta="1" aria-label="Add one ${escapeAttr(p.name)}" ${outOfStock ? "disabled" : ""}>+</button></div></div><button class="remove-item" data-remove="${escapeAttr(key)}" aria-label="Remove ${escapeAttr(p.name)}">×</button></article>`; }).join("");
-    renderCheckoutReceipt();
+    const entries = [...cart].filter(([, quantity]) => quantity > 0);
+    const count = entries.reduce((sum, [, quantity]) => sum + quantity, 0);
+    $("#cart-count").textContent = count;
+    $("#cart-open").setAttribute("aria-label", `Shopping cart, ${count} ${count === 1 ? "item" : "items"}`);
+    if (!cartPage) return;
+
+    const ready = catalogState === "ready" || catalogState === "empty";
+    const status = $("#cart-status");
+    status.textContent = !count ? "Your cart is empty." : catalogState === "loading" ? "Loading your cart…" : !ready ? "We couldn’t load your cart. Refresh to try again." : "";
+    $("#cart-layout").hidden = !count || !ready;
+    if (!count || !ready) {
+      $("#cart-selection-count").textContent = "";
+      return;
+    }
+    const keys = selectedCartKeys();
+    const items = cartOrderItems(keys);
+    const hasUnavailable = items.length !== keys.length || items.some(item => item.availability === "out_of_stock");
+    const { subtotal, shipping, total } = orderTotals(items);
+    $("#cart-selection-count").textContent = `${keys.length} of ${entries.length} selected for checkout`;
+    $("#subtotal").textContent = money(subtotal);
+    $("#cart-shipping").textContent = shippingLabel(items, shipping);
+    $("#cart-total").textContent = money(total);
+    $("#cart-stock-warning").hidden = !hasUnavailable;
+    $("#checkout-open").disabled = !items.length || hasUnavailable;
+
+    $("#cart-items").innerHTML = entries.map(([key, quantity]) => {
+      const product = productForCartKey(key);
+      const selection = parseCartKey(key);
+      const name = escapeHtml(product?.name || "Unavailable product");
+      const itemKey = escapeAttr(key);
+      const unavailable = !product || product.availability === "out_of_stock";
+      const options = [selection.color, selection.size, selection.variant].filter(Boolean).map(escapeHtml).join(" · ");
+      const image = product && resolveProductImage(productGallery(product).colorPhotos.get(selection.color) || product.image);
+      return `<article class="cart-page-item">
+        <input type="checkbox" data-cart-select="${itemKey}" aria-label="Select ${name}${options ? `, ${options}` : ""} for checkout" ${excludedCartItems.has(key) ? "" : "checked"}>
+        ${image ? `<img src="${escapeAttr(image)}" alt="" width="72" height="72">` : ""}
+        <div class="cart-page-item-copy"><h3>${name}</h3>${options ? `<small>${options}</small>` : ""}
+          ${product ? priceMarkup(product, selection) : ""}${unavailable ? "<small>Unavailable</small>" : product.availability === "preorder" ? "<small>Pre-order</small>" : ""}
+        </div>
+        <div class="cart-page-item-actions"><div class="quantity">
+          <button type="button" data-qty="${itemKey}" data-delta="-1" aria-label="Remove one ${name}" ${quantity <= 1 ? "disabled" : ""}>−</button>
+          <span>${quantity}</span>
+          <button type="button" data-qty="${itemKey}" data-delta="1" aria-label="Add one ${name}" ${unavailable ? "disabled" : ""}>+</button>
+        </div><button type="button" class="cart-remove" data-remove="${itemKey}" aria-label="Remove ${name} from cart">×</button></div>
+      </article>`;
+    }).join("");
   }
-  function setDrawer(open) { $("#cart-drawer").classList.toggle("open", open); $("#overlay").classList.toggle("show", open); $("#cart-drawer").setAttribute("aria-hidden", String(!open)); document.body.classList.toggle("no-scroll", open); }
+  $("#cart-items")?.addEventListener("change", event => {
+    const checkbox = event.target.closest("[data-cart-select]");
+    if (!checkbox) return;
+    const key = checkbox.dataset.cartSelect;
+    if (checkbox.checked) excludedCartItems.delete(key);
+    else excludedCartItems.add(key);
+    saveCartSelection();
+    renderCart();
+    [...$("#cart-items").querySelectorAll("[data-cart-select]")].find(input => input.dataset.cartSelect === key)?.focus({ preventScroll: true });
+  });
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
   const detailBackdrop = $("#product-detail-backdrop");
@@ -454,7 +540,7 @@
   });
   $("#detail-sizes").addEventListener("click", event => { const button = event.target.closest("[data-detail-size]"); if (button) { detailSize = button.dataset.detailSize; renderDetailOptions(); } });
   $("#detail-variants").addEventListener("click", event => { const button = event.target.closest("[data-detail-variant]"); if (button) { detailVariant = button.dataset.detailVariant; renderDetailOptions(); } });
-  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return; addProductToCart(detailProduct, detailColor, detailSize, detailVariant); closeProductDetail(); setDrawer(true); });
+  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return; addProductToCart(detailProduct, detailColor, detailSize, detailVariant); closeProductDetail(); location.assign("cart.html"); });
   const variantBackdrop = $("#variant-backdrop");
   let pendingVariantProduct = null;
   function fillVariantSelect(select, values, label) {
@@ -508,6 +594,7 @@
     }
     addProductToCart(pendingVariantProduct, color, size, variant);
     closeVariantPicker();
+    location.assign("cart.html");
   });
   document.addEventListener("click", e => {
     const detail = e.target.closest("[data-detail]"); if (detail) { const product = products.find(p => p.id === detail.dataset.detail); if (product) openProductDetail(product); return; }
@@ -516,13 +603,22 @@
     const qty = e.target.closest("[data-qty]"); if (qty) { const product = productForCartKey(qty.dataset.qty); if (Number(qty.dataset.delta) > 0 && product?.availability === "out_of_stock") return; cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
   });
-  $("#cart-open").addEventListener("click", () => setDrawer(true)); $("#cart-close").addEventListener("click", () => setDrawer(false)); $("#overlay").addEventListener("click", () => setDrawer(false)); $("#continue-shopping").addEventListener("click", () => setDrawer(false));
   function openCheckout() {
     if (storefrontIsClosed() && !isStoreAdmin()) return;
-    $("#checkout-form-view").hidden = false; $("#checkout-success-view").hidden = true; $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); renderCheckoutReceipt();
+    const keys = selectedCartKeys();
+    const items = cartOrderItems(keys);
+    if (!items.length || items.length !== keys.length || items.some(item => item.availability === "out_of_stock")) return;
+    const fields = $("#order-form").elements;
+    if (!fields.name.value) fields.name.value = signedInUser?.user_metadata?.full_name || "";
+    if (!fields.contact.value) fields.contact.value = signedInUser?.user_metadata?.checkout_phone || signedInUser?.email || "";
+    $("#form-status").textContent = "";
+    $("#checkout-form-view").hidden = false;
+    $("#checkout-success-view").hidden = true;
+    $("#modal-backdrop").classList.add("show");
+    document.body.classList.add("no-scroll");
+    renderCheckoutReceipt(items);
   }
-  $("#checkout-open").addEventListener("click", () => {
-    setDrawer(false);
+  $("#checkout-open")?.addEventListener("click", () => {
     if (storefrontIsClosed() && !isStoreAdmin()) return;
     if (!signedInUser) {
       resumeCheckoutAfterAuth = true;
@@ -575,7 +671,6 @@
     const screen = $("#maintenance-screen");
     if (showScreen && screen.hidden) {
       setMobileNav(false);
-      setDrawer(false);
       closeProductDetail();
       closeVariantPicker();
       if (!savedReceiptOrder) closeModal();
@@ -618,13 +713,150 @@
     renderMaintenanceMode();
   });
   function openAccount(mode = "signin") { setAuthMode(mode); accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
+  const profilePage = $("#profile-page");
+  let profileUserId = null;
+  let avatarVersion = "";
+  let avatarUrl = "";
+  let authReady = !supabaseClient;
+
+  function showProfile() {
+    if (!signedInUser) openAccount("signup");
+    else if (profilePage) $("#profile-details-title").scrollIntoView({ block: "nearest" });
+    else location.assign("profile.html");
+  }
+
+  function paintProfileAvatars() {
+    const name = signedInUser?.user_metadata?.full_name?.trim() || signedInUser?.email || "";
+    const initial = Array.from(name)[0]?.toUpperCase() || "";
+    for (const element of [$("#account-initial"), $("#profile-avatar")].filter(Boolean)) {
+      element.textContent = initial;
+      if (avatarUrl) {
+        const img = document.createElement("img");
+        img.src = avatarUrl;
+        img.alt = "";
+        element.replaceChildren(img);
+      }
+    }
+    $("#account-initial").hidden = !signedInUser;
+    $("#account-open .account-icon").hidden = Boolean(signedInUser);
+  }
+
+  async function loadProfileAvatar(userId, version) {
+    const { data, error } = await supabaseClient.storage.from("profile-photos").download(`${userId}/avatar`);
+    if (error || signedInUser?.id !== userId || avatarVersion !== version) return;
+    if (avatarUrl) URL.revokeObjectURL(avatarUrl);
+    avatarUrl = URL.createObjectURL(data);
+    paintProfileAvatars();
+  }
+
+  function renderProfile() {
+    const userId = signedInUser?.id || null;
+    const version = userId ? String(signedInUser.user_metadata?.profile_photo_version || "") : "";
+    if (profileUserId !== userId || avatarVersion !== version) {
+      if (avatarUrl) URL.revokeObjectURL(avatarUrl);
+      avatarUrl = "";
+      avatarVersion = version;
+      if (version) setTimeout(() => {
+        if (signedInUser?.id === userId && avatarVersion === version) loadProfileAvatar(userId, version);
+      }, 0);
+    }
+    paintProfileAvatars();
+    if (profilePage) {
+      $("#profile-page-status").hidden = authReady;
+      $("#profile-guest").hidden = !authReady || Boolean(userId);
+      $("#profile-layout").hidden = !userId;
+      $("#profile-actions").hidden = !userId;
+      if (profileUserId !== userId) {
+        const fields = $("#profile-details-form").elements;
+        fields.fullName.value = signedInUser?.user_metadata?.full_name || "";
+        fields.email.value = signedInUser?.email || "";
+        fields.phone.value = signedInUser?.user_metadata?.checkout_phone || "";
+        $("#profile-password-form").reset();
+        profilePage.querySelectorAll(".form-status").forEach(status => { status.textContent = ""; });
+      }
+    }
+    profileUserId = userId;
+  }
+
+  async function runProfileAction(button, status, action) {
+    const userId = signedInUser?.id;
+    if (!userId) return;
+    button.disabled = true;
+    status.textContent = "";
+    status.classList.remove("account-error");
+    try {
+      const message = await action();
+      if (signedInUser?.id === userId) status.textContent = message;
+    } catch (error) {
+      if (signedInUser?.id === userId) {
+        status.textContent = error.message || "Something went wrong. Please try again.";
+        status.classList.add("account-error");
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  if (profilePage) {
+    $("#profile-signin").addEventListener("click", () => openAccount("signin"));
+    $("#profile-orders").addEventListener("click", () => openAccount());
+    $("#profile-signout").addEventListener("click", () => signOut($("#profile-details-status")));
+    $("#profile-details-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const { fullName, phone } = form.elements;
+      runProfileAction(form.querySelector("[type=submit]"), $("#profile-details-status"), async () => {
+        const name = fullName.value.trim();
+        if (!name) throw new Error("Enter your full name.");
+        const { error } = await supabaseClient.auth.updateUser({ data: { full_name: name, checkout_phone: phone.value.trim() } });
+        if (error) throw error;
+        return "Profile saved.";
+      });
+    });
+    $("#profile-password-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const { currentPassword, newPassword, confirmPassword } = form.elements;
+      runProfileAction(form.querySelector("[type=submit]"), $("#profile-password-status"), async () => {
+        if (newPassword.value !== confirmPassword.value) throw new Error("Your new passwords don’t match.");
+        const { error } = await supabaseClient.auth.updateUser({ password: newPassword.value, current_password: currentPassword.value });
+        if (error) throw error;
+        form.reset();
+        return "Password updated.";
+      });
+    });
+    $("#profile-reset").addEventListener("click", event => {
+      runProfileAction(event.currentTarget, $("#profile-password-status"), async () => {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(signedInUser.email, { redirectTo: location.origin });
+        if (error) throw error;
+        return "Check your email for the password reset link.";
+      });
+    });
+    $("#profile-photo").addEventListener("change", event => {
+      const input = event.currentTarget;
+      const file = input.files[0];
+      if (!file) return;
+      runProfileAction(input, $("#profile-photo-status"), async () => {
+        if (!["image/jpeg", "image/png"].includes(file.type) || file.size > 2 * 1024 * 1024) throw new Error("Choose a JPG or PNG up to 2 MB.");
+        const userId = signedInUser.id;
+        const bucket = supabaseClient.storage.from("profile-photos");
+        const { error: uploadError } = await bucket.upload(`${userId}/avatar`, file, { upsert: true, cacheControl: "0" });
+        if (uploadError) throw uploadError;
+        if (signedInUser?.id !== userId) return "";
+        const { error } = await supabaseClient.auth.updateUser({ data: { profile_photo_version: String(Date.now()) } });
+        if (error) throw error;
+        return "Profile photo updated.";
+      }).finally(() => { input.value = ""; });
+    });
+  }
+
   function renderAccountState() {
     const showAuth = !signedInUser || passwordRecoveryMode;
     $("#account-backdrop .account-modal").classList.toggle("account-auth-mode", showAuth);
-    $("#account-trigger-label").innerHTML = signedInUser ? "My account<br>Orders" : "Sign in<br>Account";
-    $("#account-menu-auth").textContent = signedInUser ? "My account" : "Sign in or create account";
+    renderProfile();
+    $("#account-open").setAttribute("aria-label", signedInUser ? "My account" : "Sign in or create an account");
+    $("#account-menu-auth").textContent = signedInUser ? "My profile" : "Sign in or create account";
     $("#account-menu-history").innerHTML = signedInUser ? '<span aria-hidden="true">▤</span> Order history' : '<span aria-hidden="true">▤</span> Purchase history';
-    $("#checkout-open").innerHTML = signedInUser ? 'Review your request <span>↗</span>' : 'Create an account to order <span>↗</span>';
     $("#account-auth-view").hidden = !showAuth;
     $("#account-dashboard").hidden = showAuth;
     if (signedInUser) $("#account-email").textContent = signedInUser.email || "Signed in";
@@ -729,7 +961,7 @@
     $("#account-open").setAttribute("aria-expanded", String(open));
   }
   $("#account-open").addEventListener("click", () => setAccountPopover(accountPopover.hidden));
-  $("#account-menu-auth").addEventListener("click", () => { setAccountPopover(false); openAccount(signedInUser ? "signin" : "signup"); });
+  $("#account-menu-auth").addEventListener("click", () => { setAccountPopover(false); showProfile(); });
   $("#account-menu-history").addEventListener("click", () => { setAccountPopover(false); openAccount("signin"); });
   $("#account-side-track").addEventListener("click", event => { document.querySelectorAll(".account-side-link").forEach(link => link.classList.remove("active")); event.currentTarget.classList.add("active"); $("#order-history").scrollIntoView({ block: "nearest" }); });
   $("#account-side-history").addEventListener("click", event => { document.querySelectorAll(".account-side-link").forEach(link => link.classList.remove("active")); event.currentTarget.classList.add("active"); $("#order-history").scrollIntoView({ block: "nearest" }); });
@@ -814,14 +1046,16 @@
       status.classList.add("account-error");
     } finally { submit.disabled = false; }
   });
-  $("#account-signout").addEventListener("click", async () => {
+  async function signOut(status) {
     if (!supabaseClient) return;
     const { error } = await supabaseClient.auth.signOut();
-    if (error) $("#orders-status").textContent = "Could not sign out. Please try again.";
+    if (error) status.textContent = "Could not sign out. Please try again.";
     else { signedInUser = null; renderAccountState(); setAuthMode("signin"); }
-  });
+  }
+  $("#account-signout").addEventListener("click", () => signOut($("#orders-status")));
   if (supabaseClient) {
     supabaseClient.auth.onAuthStateChange((event, session) => {
+      authReady = true;
       signedInUser = session?.user || null;
       if (event === "PASSWORD_RECOVERY") {
         passwordRecoveryMode = true;
@@ -830,7 +1064,7 @@
       }
       renderAccountState();
       renderMaintenanceMode();
-      if (signedInUser) setTimeout(loadOrderHistory, 0);
+      if (signedInUser && (accountBackdrop.classList.contains("show") || paymentReturned)) setTimeout(loadOrderHistory, 0);
       if (signedInUser && resumeCheckoutAfterAuth) {
         resumeCheckoutAfterAuth = false;
         closeAccount();
@@ -846,7 +1080,7 @@
   setInterval(refreshScheduledMaintenance, 1000);
   document.addEventListener("visibilitychange", refreshScheduledMaintenance);
   window.addEventListener("pageshow", refreshScheduledMaintenance);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); closeContactForm(); setAccountPopover(false); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); closeContactForm(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
 
   const contactBackdrop = $("#contact-form-backdrop");
@@ -911,9 +1145,14 @@
     if (!signedInUser) { closeModal(); openAccount("signup"); $("#account-status").textContent = "Create an account or sign in first so you can place and track this order."; return; }
     if (!supabaseClient) { status.textContent = "Order tracking is temporarily unavailable. Please try again later."; return; }
     const form = new FormData(e.currentTarget);
-    const items = [...cart.entries()].filter(([, quantity]) => quantity > 0).map(([key, quantity]) => { const p = productForCartKey(key), selection = parseCartKey(key), pricing = p && priceFor(p, selection); return p ? { id: p.id, name: p.name, color: selection.color, size: selection.size, variant: selection.variant, availability: p.availability, flashSale: pricing.onSale, quantity, unitPrice: pricing.current, originalUnitPrice: pricing.regular, lineTotal: pricing.current * quantity } : null; }).filter(Boolean);
-    if (items.some(item => item.availability === "out_of_stock")) { status.textContent = "Your bag contains an out-of-stock item. Remove it before sending your order."; return; }
-    const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, estimatedTotal: items.reduce((sum, x) => sum + x.lineTotal, 0), currency: "GHS" };
+    const keys = selectedCartKeys();
+    const items = cartOrderItems(keys);
+    if (!items.length || items.length !== keys.length || items.some(item => item.availability === "out_of_stock")) {
+      status.textContent = "Review your cart and select available items before continuing.";
+      return;
+    }
+    const { shipping, total } = orderTotals(items);
+    const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, shippingTotal: items.some(item => item.shippingTotal != null) ? shipping : null, estimatedTotal: total, currency: "GHS" };
     const endpoint = window.TRikonicOrderEndpoint || "";
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
     try {
@@ -930,7 +1169,7 @@
       if (saveError) throw saveError;
       savedReceiptOrder = order;
       $("#success-order-id").textContent = `Order ID: ${order.orderId}`;
-      renderCheckoutReceipt("#success-receipt-items", "#success-receipt-total");
+      renderCheckoutReceipt(order.items, "#success-receipt-items", "#success-receipt-total");
       let sheetQueued = true;
       if (endpoint) {
         // Apps Script ContentService redirects its response to googleusercontent.com,
@@ -941,7 +1180,7 @@
       }
       $("#success-message").textContent = sheetQueued ? "Your order is saved. Opening secure Paystack payment now. We’ll email your tracking number after payment; SMS is sent when notifications are enabled." : "Your order is saved in your account, but the order sheet could not be reached. Opening secure Paystack payment now; you can still track it in your account.";
       $("#checkout-form-view").hidden = true; $("#checkout-success-view").hidden = false;
-      cart.clear(); saveCart(); renderCart(); e.currentTarget.reset();
+      keys.forEach(key => cart.delete(key)); saveCart(); renderCart(); $("#order-form").reset();
       setTimeout(loadOrderHistory, 0);
       await startPaystackPayment();
     } catch (err) { status.textContent = err.message || "We couldn’t save that just now. Please try again."; }
@@ -997,5 +1236,5 @@
   }
   // Informational pages keep the shared app shell for account/cart controls, but
   // don't need a catalog request. Avoid an Apps Script round trip on those pages.
-  if (grid && !grid.closest(".runtime-catalog")) loadProductsFromSheet();
+  if (cartPage || (grid && !grid.closest(".runtime-catalog"))) loadProductsFromSheet();
 })();
