@@ -540,7 +540,11 @@
   });
   $("#detail-sizes").addEventListener("click", event => { const button = event.target.closest("[data-detail-size]"); if (button) { detailSize = button.dataset.detailSize; renderDetailOptions(); } });
   $("#detail-variants").addEventListener("click", event => { const button = event.target.closest("[data-detail-variant]"); if (button) { detailVariant = button.dataset.detailVariant; renderDetailOptions(); } });
-  $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return; addProductToCart(detailProduct, detailColor, detailSize, detailVariant); closeProductDetail(); location.assign("cart.html"); });
+  $("#detail-add").addEventListener("click", () => {
+    if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return;
+    addProductToCart(detailProduct, detailColor, detailSize, detailVariant);
+    closeProductDetail();
+  });
   const variantBackdrop = $("#variant-backdrop");
   let pendingVariantProduct = null;
   function fillVariantSelect(select, values, label) {
@@ -594,7 +598,6 @@
     }
     addProductToCart(pendingVariantProduct, color, size, variant);
     closeVariantPicker();
-    location.assign("cart.html");
   });
   document.addEventListener("click", e => {
     const detail = e.target.closest("[data-detail]"); if (detail) { const product = products.find(p => p.id === detail.dataset.detail); if (product) openProductDetail(product); return; }
