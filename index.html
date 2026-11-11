@@ -27,14 +27,76 @@
   </header>
   <div class="mobile-nav-backdrop" id="mobile-nav-backdrop" hidden></div><aside class="mobile-sidebar" id="mobile-sidebar" aria-label="Mobile navigation" aria-hidden="true"><div class="mobile-sidebar-head"><span class="eyebrow">TRIKONIC IMPORTS</span><button id="mobile-menu-close" type="button" aria-label="Close navigation">×</button></div><nav aria-label="Pages"><a href="index.html">Home <span>↗</span></a><a href="shop.html">Shop <span>↗</span></a><a href="categories.html">Categories <span>↗</span></a><a href="ordering.html">Ordering <span>↗</span></a><a href="about.html">About <span>↗</span></a><a href="contact.html">Contact <span>↗</span></a></nav><button class="mobile-account-link" id="mobile-account-open" type="button">My account <span>↗</span></button><p>Questions? <a href="https://wa.me/233539026251">Chat with our team</a></p></aside>
 
-  <main id="home">
-    <section class="hero shop-hero"><div class="hero-content"><span class="hero-kicker">TRIKONIC IMPORTS <i>·</i> THOUGHTFULLY SOURCED</span><h1>Good finds for<br><em>everyday living.</em></h1><p>Home pieces, personal essentials and unexpected favorites, gathered from around the world and brought a little closer to home.</p><div class="hero-actions"><a class="button hero-shop-button" href="#shop">Shop the collection <span>↗</span></a><a class="button hero-story-button" href="about.html">Our story</a></div><div class="hero-indicators" aria-hidden="true"><span class="active"></span><span></span><span></span></div></div><div class="hero-caption">Curated with curiosity <span>—</span> Small team. Big love for good finds.</div></section>
-    <section class="trust-strip"><div><span>✳</span> Handpicked by us</div><div><span>↗</span> Sourced with care</div><div><span>♡</span> Small business, big heart</div><div><span>✴</span> New finds, often</div></section>
-    <section class="home-categories" aria-labelledby="home-categories-title"><div class="home-section-heading"><div><span class="eyebrow">SHOP BY CATEGORY</span><h2 id="home-categories-title">Find exactly what you need.</h2></div><a class="home-section-link" href="categories.html">Browse all categories <span>↗</span></a></div><div class="home-category-grid" id="home-category-grid"></div></section>
-    <section class="shop-section" id="shop"><div class="section-heading"><div><span class="eyebrow">TRENDING NOW</span><h2>Products our customers <em>love.</em></h2></div><a class="home-section-link" href="shop.html">View all products <span>↗</span></a></div><div class="product-grid" id="product-grid"></div></section>
-    <section class="faq-section" id="faq"><div class="faq-intro"><span class="eyebrow">THE LITTLE DETAILS</span><h2>Good to <em>know.</em></h2><p>Questions before you make it yours? We’ve got you.</p></div><div class="faq-list"><details><summary>How do I place an order?<span>+</span></summary><p>Add your picks to the bag, sign in or create an account, enter your delivery details, and pay securely online. You can track the order from your account.</p></details><details><summary>Can I pay on the website?<span>+</span></summary><p>Yes. Pay securely by card or mobile money through Paystack. Your order is marked paid only after Paystack confirms the transaction. Shipping is included in the displayed prices.</p></details><details><summary>Where do you deliver?<span>+</span></summary><p>Delivery options and costs are confirmed with you after we receive your order request.</p></details><details><summary>Are all items always in stock?<span>+</span></summary><p>We source in small batches, so availability can change. We’ll confirm each item with you personally.</p></details></div></section>
+  <main class="home-page" id="home">
+    <section class="hero shop-hero" aria-labelledby="home-hero-title">
+      <div class="hero-slides" aria-hidden="true">
+        <img class="hero-slide active" src="images/tv-console-bright-mountain.jpg" alt="" fetchpriority="high">
+        <img class="hero-slide" data-src="images/executive-office-desk-wide.jpg" alt="">
+        <img class="hero-slide" data-src="images/round-marble-dining-set.jpg" alt="">
+        <img class="hero-slide" data-src="images/orange-lounge-chair.jpg" alt="">
+      </div>
+      <div class="hero-content">
+        <h1 id="home-hero-title">Good finds for<br><em>everyday living.</em></h1>
+        <p>Furniture, home essentials and personal favorites, sourced from Asia and Europe.</p>
+        <div class="hero-actions">
+          <a class="button hero-shop-button" href="shop.html">Shop the collection <span aria-hidden="true">↗</span></a>
+          <a class="button hero-story-button" href="about.html">Our story</a>
+        </div>
+        <div class="hero-controls" role="group" aria-label="Background carousel" hidden>
+          <button class="hero-dot" type="button" aria-label="Show living room" aria-pressed="true"></button>
+          <button class="hero-dot" type="button" aria-label="Show office" aria-pressed="false"></button>
+          <button class="hero-dot" type="button" aria-label="Show dining room" aria-pressed="false"></button>
+          <button class="hero-dot" type="button" aria-label="Show lounge chair" aria-pressed="false"></button>
+          <button class="hero-playback" type="button" aria-label="Pause slideshow"><span aria-hidden="true">Ⅱ</span></button>
+        </div>
+      </div>
+    </section>
+    <div class="home-discovery">
+      <section class="home-categories" aria-labelledby="home-categories-title">
+        <div class="home-section-heading">
+          <h2 id="home-categories-title">Shop by category</h2>
+          <a class="home-section-link" href="categories.html">View all categories <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="home-category-grid" id="home-category-grid"></div>
+      </section>
+      <nav class="home-promos" aria-label="Shop collections">
+        <a class="home-promo home-promo-stock" href="shop.html?collection=in-stock#shop">
+          <img src="images/air-fryer.jpg" alt="" loading="lazy">
+          <div><h2>In stock</h2><p>Browse products available to order now.</p><span>Shop in stock →</span></div>
+        </a>
+        <a class="home-promo home-promo-preorder" href="shop.html?collection=preorder#shop">
+          <img src="images/executive-desk-walnut.jpg" alt="" loading="lazy">
+          <div><h2>Pre-order finds</h2><p>Explore items available to reserve.</p><span>Shop pre-orders →</span></div>
+        </a>
+        <a class="home-promo home-promo-all" id="home-promo-sale" href="shop.html">
+          <img src="images/neutral-eva-slides.jpg" alt="" loading="lazy">
+          <div><h2>All finds</h2><p>Explore the full Trikonic catalog.</p><span>Browse the shop →</span></div>
+        </a>
+      </nav>
+      <section class="home-products" id="shop" aria-labelledby="home-featured-title">
+        <div class="home-section-heading">
+          <h2 id="home-featured-title">Featured finds</h2>
+          <a class="home-section-link" href="shop.html">View all products <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="product-grid" id="product-grid"></div>
+      </section>
+      <div class="home-benefits">
+        <a href="ordering.html"><span aria-hidden="true">↗</span><div><strong>Shipping included</strong><small>In the listed prices</small></div></a>
+        <a href="ordering.html"><span aria-hidden="true">▣</span><div><strong>Secure checkout</strong><small>Pay online with Paystack</small></div></a>
+        <button id="home-track-order" type="button"><span aria-hidden="true">◎</span><div><strong>Order tracking</strong><small>Follow orders in your account</small></div></button>
+        <a href="https://wa.me/233539026251" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☏</span><div><strong>Customer support</strong><small>Chat with our team</small></div></a>
+      </div>
+      <section class="home-products" id="home-more-products" aria-labelledby="home-more-title" hidden>
+        <div class="home-section-heading">
+          <h2 id="home-more-title">More to explore</h2>
+          <a class="home-section-link" href="shop.html">View the full catalog <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="product-grid" id="home-more-grid"></div>
+      </section>
+    </div>
+    <section class="faq-section" id="faq"><div class="faq-intro"><span class="eyebrow">THE LITTLE DETAILS</span><h2>Good to <em>know.</em></h2><p>Questions before you make it yours? We’ve got you.</p></div><div class="faq-list"><details><summary>How do I place an order?<span>+</span></summary><p>Add your picks to the bag, sign in or create an account, enter your delivery details, and pay securely online. You can track the order from your account.</p></details><details><summary>Can I pay on the website?<span>+</span></summary><p>Yes. Pay securely by card or mobile money through Paystack. Your order is marked paid only after Paystack confirms the transaction. Shipping is included in the displayed prices.</p></details><details><summary>Where do you deliver?<span>+</span></summary><p>We’ll confirm delivery arrangements with you after you place your order.</p></details><details><summary>Are all items always in stock?<span>+</span></summary><p>We source in small batches, so availability can change. We’ll confirm each item with you personally.</p></details></div></section>
     <section class="contact-section" id="contact"><div class="contact-heading"><span class="eyebrow">HERE WHEN YOU NEED US</span><h2>Let’s find the <em>right thing.</em></h2><p>Questions about an item or an order? Send us a note and our small team will get back to you.</p><a class="button contact-button" href="contact.html#contact-form">Contact Trikonic <span>↗</span></a></div><div class="contact-cards"><div class="contact-card"><span class="contact-icon">☎</span><strong>WhatsApp / Call</strong><span><a href="tel:+233539026251">0539026251</a> · <a href="https://wa.me/233539026251">WhatsApp</a></span></div><a class="contact-card" href="mailto:trikonic1011@gmail.com"><span class="contact-icon">✉</span><strong>Email us</strong><span>trikonic1011@gmail.com</span></a><div class="contact-card"><span class="contact-icon">◷</span><strong>Working hours</strong><span>Mon–Fri, 8:30 AM–6:00 PM GMT<br>Sat, 9:00 AM–3:00 PM GMT</span></div></div></section>
-    <section class="newsletter"><span class="eyebrow">A NOTE WHEN THERE’S SOMETHING NEW</span><h2>Good finds don’t <em>keep.</em></h2><p>Follow along for new arrivals and little updates from our corner of the world.</p><a class="button button-light" href="mailto:trikonic1011@gmail.com?subject=Keep%20me%20posted">Say hello <span>↗</span></a><span class="newsletter-star">✳</span></section>
+    <section class="newsletter"><span class="eyebrow">A NOTE WHEN THERE’S SOMETHING NEW</span><h2>Stay in <em>touch.</em></h2><p>Ask us about new arrivals and upcoming sales.</p><a class="button button-light" href="https://wa.me/233539026251" target="_blank" rel="noopener noreferrer">Chat on WhatsApp <span aria-hidden="true">↗</span></a><span class="newsletter-star">✳</span></section>
   </main>
 
   <footer class="site-footer"><div class="footer-brand-column"><a class="brand" href="/" aria-label="Trikonic Imports home"><img class="brand-mark" src="images/trikonic-logo.svg" alt=""><span>trikonic<span class="brand-light"> imports</span></span></a><p>Thoughtfully sourced finds from around the world, brought a little closer to home.</p><a href="mailto:trikonic1011@gmail.com">trikonic1011@gmail.com</a></div><div><h3>Shop</h3><a href="shop.html">All finds</a><a href="categories.html">Browse categories</a><a href="shop.html?search=new">New finds</a></div><div><h3>Customer care</h3><a href="contact.html">Contact us</a><a href="ordering.html">Ordering and delivery</a><button type="button" id="footer-track-order">Track my order</button></div><div><h3>Trikonic</h3><a href="about.html">Our story</a><a href="contact.html">Get in touch</a><a href="ordering.html#faq">FAQs</a></div><div class="footer-legal"><span>© <span id="year"></span> Trikonic Imports. All rights reserved.</span><span>Made with care in Ghana</span></div></footer>

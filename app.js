@@ -26,6 +26,9 @@
   let productSort = "recommended";
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
+  const homeMore = $("#home-more-products");
+  const collection = new URLSearchParams(location.search).get("collection");
+  const collectionLabel = { "in-stock": "In stock", preorder: "Pre-orders", sale: "Flash sale" };
   function parseCartKey(key) {
     try { const parsed = JSON.parse(key); if (Array.isArray(parsed) && (parsed.length === 3 || parsed.length === 4)) return { id: String(parsed[0]), color: String(parsed[1] || ""), size: String(parsed[2] || ""), variant: String(parsed[3] || "") }; } catch (_) {}
     return { id: String(key), color: "", size: "", variant: "" };
@@ -167,28 +170,38 @@
   }
 
   function renderProducts() {
+    if (homeMore) homeMore.hidden = true;
     if (catalogState === "loading") { grid.innerHTML = '<p class="catalog-message">Loading the latest finds…</p>'; return; }
     if (catalogState === "error") { grid.innerHTML = '<p class="catalog-message">We couldn’t load the catalog right now. Please refresh in a moment.</p>'; return; }
     if (catalogState === "empty") { grid.innerHTML = '<p class="catalog-message">No products are published right now. Please check back soon.</p>'; return; }
     const query = searchTerm.trim().toLowerCase();
     let shown = products.filter(p => (category === "All finds" || p.category === category) && productStartingPrice(p) <= maxPriceFilter && (!query || `${p.name} ${p.category} ${p.description} ${(p.colors || []).join(" ")} ${(p.sizes || []).join(" ")}`.toLowerCase().includes(query)));
+    if (collection === "in-stock") shown = shown.filter(p => p.availability === "in_stock");
+    if (collection === "preorder") shown = shown.filter(p => p.availability === "preorder");
+    if (collection === "sale") shown = shown.filter(p => p.flashSale && p.availability !== "out_of_stock");
     if (productSort === "price-low") shown = shown.sort((a, b) => productStartingPrice(a) - productStartingPrice(b));
     else if (productSort === "price-high") shown = shown.sort((a, b) => productStartingPrice(b) - productStartingPrice(a));
     else if (productSort === "name") shown = shown.sort((a, b) => a.name.localeCompare(b.name));
-    const pageName = location.pathname.split("/").pop();
-    if (pageName === "" || pageName === "index.html") shown = shown.slice(0, 4);
     const resultCount = $("#product-result-count");
-    if (resultCount) resultCount.textContent = `Showing ${shown.length} of ${products.length} products`;
-    if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products in this category right now."}</p>`; return; }
-    grid.innerHTML = shown.map(p => {
-      const preorder = p.availability === "preorder";
-      const outOfStock = p.availability === "out_of_stock";
-      const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : inStockLabel(p).toUpperCase();
-      const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
-      const startPrice = productStartingPrice(p);
-      const price = p.flashSale && startPrice < p.price ? `<span class="sale-prices"><s>${money(p.price)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
-      return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}">→</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><div class="product-card-price">${price}</div><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div></div></article>`;
-    }).join("");
+    const filteredCollection = Object.hasOwn(collectionLabel, collection);
+    if (resultCount) resultCount.textContent = `Showing ${shown.length} of ${products.length} products${filteredCollection ? ` · ${collectionLabel[collection]}` : ""}`;
+    const clearCollection = $("#clear-shop-collection");
+    if (clearCollection) clearCollection.hidden = !filteredCollection;
+    if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products match these filters right now."}</p>`; return; }
+    grid.innerHTML = (homeMore ? shown.slice(0, 5) : shown).map(productCardMarkup).join("");
+    if (homeMore && shown.length > 5) {
+      $("#home-more-grid").innerHTML = shown.slice(5, 10).map(productCardMarkup).join("");
+      homeMore.hidden = false;
+    }
+  }
+  function productCardMarkup(p) {
+    const preorder = p.availability === "preorder";
+    const outOfStock = p.availability === "out_of_stock";
+    const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : inStockLabel(p).toUpperCase();
+    const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
+    const startPrice = productStartingPrice(p);
+    const price = p.flashSale && startPrice < p.price ? `<span class="sale-prices"><s>${money(p.price)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
+    return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}">→</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><div class="product-card-price">${price}</div><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div></div></article>`;
   }
   function renderCategories() {
     const categoryRow = $("#categories");
@@ -204,8 +217,19 @@
       categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
     }
     if (homeCategoryGrid) {
-      const labels = ["Top picks", "Curated finds", "Worth a look", "New discoveries"];
-      homeCategoryGrid.innerHTML = categories.slice(0, 4).map((name, index) => `<a class="home-category-card" href="shop.html?category=${encodeURIComponent(name)}"><span class="home-category-kicker">${labels[index % labels.length]}</span><strong>${escapeHtml(name)}</strong><span class="home-category-cta">Explore collection <b aria-hidden="true">↗</b></span></a>`).join("");
+      homeCategoryGrid.innerHTML = categories.slice(0, 8).map(name => {
+        const image = resolveProductImage(products.find(p => p.category === name && p.image)?.image);
+        return `<a class="home-category-card" href="shop.html?category=${encodeURIComponent(name)}"><span class="home-category-photo" aria-hidden="true">${image ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">` : "↗"}</span><strong>${escapeHtml(name)}</strong></a>`;
+      }).join("");
+      const sale = products.find(p => p.flashSale && p.availability !== "out_of_stock");
+      const promo = $("#home-promo-sale");
+      if (promo && sale) {
+        promo.href = "shop.html?collection=sale#shop";
+        if (sale.image) promo.querySelector("img").src = resolveProductImage(sale.image);
+        promo.querySelector("h2").textContent = "Flash sale";
+        promo.querySelector("p").textContent = "See current discounts on selected items.";
+        promo.querySelector("span").textContent = "Shop deals →";
+      }
     }
   }
   $("#product-search").value = searchTerm;
@@ -712,6 +736,7 @@
   document.addEventListener("click", event => { if (!event.target.closest(".account-menu-wrap")) setAccountPopover(false); });
   $("#maintenance-admin-open").addEventListener("click", () => openAccount("signin"));
   $("#footer-track-order")?.addEventListener("click", () => openAccount("signin"));
+  $("#home-track-order")?.addEventListener("click", () => openAccount("signin"));
   $("#account-close").addEventListener("click", closeAccount);
   $("#orders-refresh").addEventListener("click", loadOrderHistory);
   accountBackdrop.addEventListener("click", e => { if (e.target === accountBackdrop) closeAccount(); });
@@ -923,6 +948,53 @@
     finally { submit.disabled = false; submit.innerHTML = 'Continue to payment <span>↗</span>'; }
   });
   renderCategories(); renderProducts(); renderCart();
+  const heroControls = $(".hero-controls");
+  if (heroControls) {
+    const slides = [...document.querySelectorAll(".hero-slide")];
+    const dots = [...heroControls.querySelectorAll(".hero-dot")];
+    const playback = heroControls.querySelector(".hero-playback");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let active = 0;
+    let requested = 0;
+    let timer;
+    let playing = !reducedMotion.matches;
+
+    function scheduleSlide() {
+      clearTimeout(timer);
+      if (playing && !document.hidden) {
+        timer = setTimeout(() => showSlide((requested + 1) % slides.length), 20000);
+      }
+    }
+
+    async function showSlide(index) {
+      requested = index;
+      scheduleSlide();
+      const slide = slides[index];
+      if (!slide.hasAttribute("src")) slide.src = slide.dataset.src;
+      try { await slide.decode(); } catch { return; }
+      if (requested !== index) return;
+      slides[active].classList.remove("active");
+      dots[active].setAttribute("aria-pressed", "false");
+      slide.classList.add("active");
+      dots[index].setAttribute("aria-pressed", "true");
+      active = index;
+    }
+
+    function updatePlayback() {
+      playback.setAttribute("aria-label", playing ? "Pause slideshow" : "Play slideshow");
+      playback.firstElementChild.textContent = playing ? "Ⅱ" : "▶";
+      scheduleSlide();
+    }
+
+    dots.forEach((dot, index) => dot.addEventListener("click", () => showSlide(index)));
+    playback.addEventListener("click", () => { playing = !playing; updatePlayback(); });
+    reducedMotion.addEventListener("change", event => {
+      if (event.matches) { playing = false; updatePlayback(); }
+    });
+    document.addEventListener("visibilitychange", scheduleSlide);
+    heroControls.hidden = false;
+    updatePlayback();
+  }
   // Informational pages keep the shared app shell for account/cart controls, but
   // don't need a catalog request. Avoid an Apps Script round trip on those pages.
   if (grid && !grid.closest(".runtime-catalog")) loadProductsFromSheet();
