@@ -219,8 +219,9 @@ body.mobile-nav-open{overflow:hidden}
 :is(.shop-sidebar,.category-page-sidebar) .category-chip {
   color:var(--white);
 }
-:is(.shop-sidebar,.category-page-sidebar) .category-chip:hover {
+:is(.shop-sidebar,.category-page-sidebar) .category-chip:hover:not(.active) {
   background:#0b426b;
+  color:var(--white);
 }
 :is(.shop-sidebar,.category-page-sidebar) .category-chip.active {
   background:var(--orange);
