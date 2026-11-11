@@ -210,7 +210,6 @@ body.mobile-nav-open{overflow:hidden}
 .shop-page > .page-banner{background:var(--orange)}
 .shop-page > .page-banner :is(.page-kicker,p){color:var(--ink)}
 
-.categories-page > .page-banner,
 :is(.shop-page,.categories-page) .results-toolbar,
 .shop-sidebar,
 .category-page-sidebar {
@@ -218,7 +217,6 @@ body.mobile-nav-open{overflow:hidden}
   border-color:var(--ink);
   color:var(--white);
 }
-.categories-page > .page-banner :is(.page-kicker,p),
 :is(.shop-page,.categories-page) .results-toolbar :is(.eyebrow,p,.sort-control),
 .shop-sidebar :is(h2,label,.price-range-labels),
 .category-page-sidebar :is(h2,p),
@@ -241,3 +239,49 @@ body.mobile-nav-open{overflow:hidden}
 .shop-sidebar hr{background:rgba(255,255,255,.3)}
 .shop-sidebar input[type=range]{accent-color:var(--orange)}
 :is(.shop-page,.categories-page) .sort-control select{border-color:var(--line)}
+
+.page-main:not(.shop-page) > .page-banner,
+.home-category-card:is(.mint,.blue,.silver),
+.ordering-details .payment-info,
+.team-section,
+.newsletter {
+  background:var(--ink);
+  color:var(--white);
+}
+.page-main:not(.shop-page) > .page-banner :is(h1,p,.page-kicker,.ordering-trust),
+.home-category-card:is(.mint,.blue,.silver) :is(strong,.home-category-kicker,.home-category-cta),
+.ordering-details .payment-info :is(h2,p,.eyebrow),
+.team-heading :is(h2,p,.eyebrow),
+.newsletter :is(p,.eyebrow) {
+  color:var(--white);
+}
+.home-category-card:is(.mint,.blue,.silver) .home-category-cta b,
+.ordering-trust span::first-letter {
+  color:var(--orange);
+}
+.home-category-card.orange,
+.hero-shop-button,
+.ordering-hero .button,
+.ordering-steps article > span,
+.contact-icon,
+.contact-page-card > span,
+.contact-message,
+.community-strip,
+.newsletter .button-light,
+.account-side-link.active {
+  background:var(--orange);
+  color:var(--ink);
+}
+.home-category-card.orange :is(strong,.home-category-kicker,.home-category-cta,b),
+.contact-message :is(h2,p),
+.community-strip :is(h2,.eyebrow) {
+  color:var(--ink);
+}
+.hero-shop-button:hover,
+.ordering-hero .button:hover,
+.newsletter .button-light:hover {
+  background:#ff8a36;
+}
+.ordering-details .payment-info{border-color:var(--ink)}
+.team-photo-placeholder{background:#0b426b;color:var(--white)}
+.team-photo-placeholder > span{background:var(--orange)}
