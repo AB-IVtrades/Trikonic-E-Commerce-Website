@@ -275,5 +275,7 @@ body.mobile-nav-open{overflow:hidden}
   background:#ff8a36;
 }
 .ordering-details .payment-info{border-color:var(--ink)}
+.team-photo,.team-photo-placeholder{width:100%;height:auto;aspect-ratio:1}
+.team-photo{display:block;object-fit:cover}
 .team-photo-placeholder{background:#0b426b;color:var(--white)}
 .team-photo-placeholder > span{background:var(--orange)}
