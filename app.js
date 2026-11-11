@@ -665,6 +665,9 @@
     return minutes < 8 * 60 + 30 || minutes >= 18 * 60;
   }
   function storefrontIsClosed() { return manualMaintenance || outsideStoreHours(); }
+  const maintenanceControl = $("#admin-maintenance-control");
+  const maintenanceStatus = $("#maintenance-status");
+  const maintenanceToggle = $("#maintenance-toggle");
   let lastScheduledClosure;
   function renderMaintenanceMode() {
     const isAdmin = isStoreAdmin();
@@ -683,13 +686,14 @@
       ? "Shop Monday to Friday, 8:30 AM–6:00 PM, and Saturday, 9:00 AM–3:00 PM GMT. We’re closed on Sundays."
       : "We’re updating the collection right now. Please check back soon.";
     document.body.classList.toggle("maintenance-active", showScreen);
-    $("#admin-maintenance-control").hidden = !isAdmin;
-    $("#maintenance-status").textContent = !maintenanceLoaded ? "Checking storefront status…"
+    if (!maintenanceControl) return;
+    maintenanceControl.hidden = !isAdmin;
+    maintenanceStatus.textContent = !maintenanceLoaded ? "Checking storefront status…"
       : manualMaintenance ? "Manual maintenance is on."
       : scheduledClosure ? "The store is closed outside scheduled hours."
       : "The storefront is open.";
-    $("#maintenance-toggle").textContent = manualMaintenance ? "Turn off manual maintenance" : "Turn on manual maintenance";
-    $("#maintenance-toggle").setAttribute("aria-pressed", String(manualMaintenance));
+    maintenanceToggle.textContent = manualMaintenance ? "Turn off manual maintenance" : "Turn on manual maintenance";
+    maintenanceToggle.setAttribute("aria-pressed", String(manualMaintenance));
   }
   async function loadMaintenanceMode() {
     if (!supabaseClient) { maintenanceLoaded = true; renderMaintenanceMode(); return; }
@@ -699,16 +703,15 @@
     maintenanceLoaded = true;
     renderMaintenanceMode();
   }
-  $("#maintenance-toggle").addEventListener("click", async () => {
+  maintenanceToggle?.addEventListener("click", async () => {
     if (!isStoreAdmin() || !supabaseClient) return;
-    const button = $("#maintenance-toggle");
-    button.disabled = true;
-    $("#maintenance-status").textContent = "Saving storefront setting…";
+    maintenanceToggle.disabled = true;
+    maintenanceStatus.textContent = "Saving storefront setting…";
     const nextMode = !manualMaintenance;
     const { data, error } = await supabaseClient.from("site_settings").update({ maintenance_mode: nextMode }).eq("id", 1).select("maintenance_mode").single();
-    button.disabled = false;
+    maintenanceToggle.disabled = false;
     if (error || !data) {
-      $("#maintenance-status").textContent = "Could not update the storefront. Check admin access and try again.";
+      maintenanceStatus.textContent = "Could not update the storefront. Check admin access and try again.";
       console.error("Could not update maintenance mode.", error);
       return;
     }
