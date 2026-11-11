@@ -13,7 +13,7 @@
   let resumeCheckoutAfterAuth = false;
   const paymentReturned = new URLSearchParams(location.search).get("payment") === "return";
   const adminEmail = String(window.TRikonicAdminEmail || "").trim().toLowerCase();
-  let maintenanceMode = false;
+  let manualMaintenance = false;
   let maintenanceLoaded = false;
   let cart = new Map();
   try {
@@ -493,10 +493,13 @@
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
   });
   $("#cart-open").addEventListener("click", () => setDrawer(true)); $("#cart-close").addEventListener("click", () => setDrawer(false)); $("#overlay").addEventListener("click", () => setDrawer(false)); $("#continue-shopping").addEventListener("click", () => setDrawer(false));
-  function openCheckout() { $("#checkout-form-view").hidden = false; $("#checkout-success-view").hidden = true; $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); renderCheckoutReceipt(); }
+  function openCheckout() {
+    if (storefrontIsClosed() && !isStoreAdmin()) return;
+    $("#checkout-form-view").hidden = false; $("#checkout-success-view").hidden = true; $("#modal-backdrop").classList.add("show"); document.body.classList.add("no-scroll"); renderCheckoutReceipt();
+  }
   $("#checkout-open").addEventListener("click", () => {
     setDrawer(false);
-    if (maintenanceMode && !isStoreAdmin()) return;
+    if (storefrontIsClosed() && !isStoreAdmin()) return;
     if (!signedInUser) {
       resumeCheckoutAfterAuth = true;
       openAccount("signup");
@@ -530,24 +533,47 @@
   const accountBackdrop = $("#account-backdrop");
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
   function isStoreAdmin() { return Boolean(signedInUser?.email && adminEmail && signedInUser.email.trim().toLowerCase() === adminEmail); }
+  function outsideStoreHours(now = new Date()) {
+    // Ghana uses GMT year-round.
+    const day = now.getUTCDay();
+    const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+    if (day === 0) return true;
+    if (day === 6) return minutes < 9 * 60 || minutes >= 15 * 60;
+    return minutes < 8 * 60 + 30 || minutes >= 18 * 60;
+  }
+  function storefrontIsClosed() { return manualMaintenance || outsideStoreHours(); }
+  let lastScheduledClosure;
   function renderMaintenanceMode() {
     const isAdmin = isStoreAdmin();
+    const scheduledClosure = outsideStoreHours();
+    lastScheduledClosure = scheduledClosure;
+    const showScreen = (manualMaintenance || scheduledClosure) && !isAdmin;
     const screen = $("#maintenance-screen");
-    // Never show the outage screen while the setting is still being checked.
-    // The page starts with this screen hidden, so keep it that way until the
-    // authoritative setting has loaded.
-    screen.hidden = !maintenanceLoaded || !maintenanceMode || isAdmin;
-    document.body.classList.toggle("maintenance-active", maintenanceMode && !isAdmin);
+    if (showScreen && screen.hidden) {
+      setMobileNav(false);
+      setDrawer(false);
+      closeProductDetail();
+      closeVariantPicker();
+      if (!savedReceiptOrder) closeModal();
+    }
+    screen.hidden = !showScreen;
+    screen.querySelector("p").textContent = scheduledClosure && !manualMaintenance
+      ? "Shop Monday to Friday, 8:30 AM–6:00 PM, and Saturday, 9:00 AM–3:00 PM GMT. We’re closed on Sundays."
+      : "We’re updating the collection right now. Please check back soon.";
+    document.body.classList.toggle("maintenance-active", showScreen);
     $("#admin-maintenance-control").hidden = !isAdmin;
-    $("#maintenance-status").textContent = !maintenanceLoaded ? "Checking storefront status…" : maintenanceMode ? "Maintenance mode is on. Shoppers see the maintenance page." : "Maintenance mode is off. The storefront is open.";
-    $("#maintenance-toggle").textContent = maintenanceMode ? "Turn off maintenance mode" : "Turn on maintenance mode";
-    $("#maintenance-toggle").setAttribute("aria-pressed", String(maintenanceMode));
+    $("#maintenance-status").textContent = !maintenanceLoaded ? "Checking storefront status…"
+      : manualMaintenance ? "Manual maintenance is on."
+      : scheduledClosure ? "The store is closed outside scheduled hours."
+      : "The storefront is open.";
+    $("#maintenance-toggle").textContent = manualMaintenance ? "Turn off manual maintenance" : "Turn on manual maintenance";
+    $("#maintenance-toggle").setAttribute("aria-pressed", String(manualMaintenance));
   }
   async function loadMaintenanceMode() {
     if (!supabaseClient) { maintenanceLoaded = true; renderMaintenanceMode(); return; }
     const { data, error } = await supabaseClient.from("site_settings").select("maintenance_mode").eq("id", 1).maybeSingle();
     if (error) { console.warn("Could not load storefront maintenance setting.", error); maintenanceLoaded = true; renderMaintenanceMode(); return; }
-    maintenanceMode = Boolean(data?.maintenance_mode);
+    manualMaintenance = Boolean(data?.maintenance_mode);
     maintenanceLoaded = true;
     renderMaintenanceMode();
   }
@@ -556,7 +582,7 @@
     const button = $("#maintenance-toggle");
     button.disabled = true;
     $("#maintenance-status").textContent = "Saving storefront setting…";
-    const nextMode = !maintenanceMode;
+    const nextMode = !manualMaintenance;
     const { data, error } = await supabaseClient.from("site_settings").update({ maintenance_mode: nextMode }).eq("id", 1).select("maintenance_mode").single();
     button.disabled = false;
     if (error || !data) {
@@ -564,7 +590,7 @@
       console.error("Could not update maintenance mode.", error);
       return;
     }
-    maintenanceMode = Boolean(data.maintenance_mode);
+    manualMaintenance = Boolean(data.maintenance_mode);
     renderMaintenanceMode();
   });
   function openAccount(mode = "signin") { setAuthMode(mode); accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
@@ -789,6 +815,12 @@
   }
   renderAccountState(); setAuthMode("signup");
   loadMaintenanceMode();
+  function refreshScheduledMaintenance() {
+    if (lastScheduledClosure !== outsideStoreHours()) renderMaintenanceMode();
+  }
+  setInterval(refreshScheduledMaintenance, 1000);
+  document.addEventListener("visibilitychange", refreshScheduledMaintenance);
+  window.addEventListener("pageshow", refreshScheduledMaintenance);
   document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); setDrawer(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); closeContactForm(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
 
@@ -850,7 +882,7 @@
   $("#order-form").addEventListener("submit", async e => {
     e.preventDefault();
     const status = $("#form-status"); const submit = $(".submit-order");
-    if (maintenanceMode && !isStoreAdmin()) { closeModal(); return; }
+    if (storefrontIsClosed() && !isStoreAdmin()) { closeModal(); renderMaintenanceMode(); return; }
     if (!signedInUser) { closeModal(); openAccount("signup"); $("#account-status").textContent = "Create an account or sign in first so you can place and track this order."; return; }
     if (!supabaseClient) { status.textContent = "Order tracking is temporarily unavailable. Please try again later."; return; }
     const form = new FormData(e.currentTarget);
