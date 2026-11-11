@@ -270,6 +270,7 @@
   function escapeAttr(s) { return escapeHtml(s); }
   const detailBackdrop = $("#product-detail-backdrop");
   let detailProduct = null, detailColor = "", detailSize = "", detailVariant = "";
+  let detailColorPhotos = new Map();
   const swatchColors = {
     black:"#242424", jet:"#171717", charcoal:"#414141", graphite:"#454545",
     white:"#fffefa", ivory:"#f5f0e5", "off white":"#f5f0e5", "off-white":"#f5f0e5",
@@ -284,6 +285,65 @@
   const swatchColorNames = Object.keys(swatchColors).sort((a, b) => b.length - a.length);
   function normalizeSwatchName(value) {
     return String(value || "").toLowerCase().replace(/[_-]+/g, " ").replace(/[^a-z0-9#]+/g, " ").trim().replace(/\s+/g, " ");
+  }
+  const photoColorAliases = [
+    ["white", "cream", "ivory", "off white"],
+    ["gray", "grey", "charcoal"],
+    ["yellow", "mustard"],
+    ["burgundy", "wine", "whine", "maroon"]
+  ];
+  function productGallery(product) {
+    const photos = new Set();
+    const colorPhotos = new Map();
+    const unlabeledPhotos = [];
+    const colors = (product.colors || []).map(label => ({ label, name: normalizeSwatchName(label) }))
+      .filter(color => color.name).sort((a, b) => b.name.length - a.name.length);
+
+    for (const entry of [product.image, ...(product.images || [])]) {
+      if (!entry) continue;
+      const separator = entry.indexOf("|");
+      const label = separator < 0 ? "" : entry.slice(0, separator).trim();
+      const image = resolveProductImage(separator < 0 ? entry : entry.slice(separator + 1));
+      if (!image) continue;
+      photos.add(image);
+      if (label) {
+        const color = colors.find(option => normalizeVariantOption(option.label) === normalizeVariantOption(label));
+        if (color) colorPhotos.set(color.label, image);
+      } else {
+        unlabeledPhotos.push(image);
+      }
+    }
+
+    const labeledImages = new Set(colorPhotos.values());
+    const aliasMatches = [];
+    for (const image of unlabeledPhotos) {
+      if (labeledImages.has(image) || /^(data:|blob:)/i.test(image)) continue;
+      const filename = image.split(/[?#]/)[0].split("/").pop().replace(/\.[^.]+$/, "");
+      const words = ` ${normalizeSwatchName(filename.replace(/%20/gi, " "))} `;
+      const exact = colors.filter(color => words.includes(` ${color.name} `));
+      if (exact.length) {
+        const best = exact[0];
+        const unambiguous = exact.every(color => ` ${best.name} `.includes(` ${color.name} `));
+        if (unambiguous && !colorPhotos.has(best.label)) colorPhotos.set(best.label, image);
+        continue;
+      }
+      const aliases = colors.filter(color => photoColorAliases.some(group =>
+        group.includes(color.name) && group.some(name => words.includes(` ${name} `))
+      ));
+      if (aliases.length === 1) aliasMatches.push([aliases[0].label, image]);
+    }
+    for (const [color, image] of aliasMatches) {
+      if (!colorPhotos.has(color)) colorPhotos.set(color, image);
+    }
+    return { images: [...photos], colorPhotos };
+  }
+  function showDetailPhoto(image) {
+    $("#detail-main-image").src = image;
+    $("#detail-thumbnails").querySelectorAll("[data-detail-image]").forEach(button => {
+      const active = button.dataset.detailImage === image;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
   }
   function swatchFor(color) {
     const value = String(color || "").trim();
@@ -322,11 +382,11 @@
     detailColor = "";
     detailSize = "";
     detailVariant = "";
-    const images = [...new Set((product.images?.length ? product.images : [product.image]).filter(Boolean))];
-    const mainImage = images[0] || product.image;
-    $("#detail-main-image").src = resolveProductImage(mainImage);
+    const { images, colorPhotos } = productGallery(product);
+    detailColorPhotos = colorPhotos;
     $("#detail-main-image").alt = product.name;
-    $("#detail-thumbnails").innerHTML = images.map((image, index) => `<button type="button" class="detail-thumbnail ${index === 0 ? "active" : ""}" data-detail-image="${escapeAttr(image)}" aria-label="View product image ${index + 1}"><img src="${escapeAttr(resolveProductImage(image))}" alt=""></button>`).join("");
+    $("#detail-thumbnails").innerHTML = images.map((image, index) => `<button type="button" class="detail-thumbnail" data-detail-image="${escapeAttr(image)}" aria-label="View product image ${index + 1}"><img src="${escapeAttr(image)}" alt=""></button>`).join("");
+    showDetailPhoto(images[0] || "");
     $("#detail-category").textContent = product.category || "Trikonic find";
     $("#detail-name").textContent = product.name;
     $("#detail-description").textContent = product.description || "Thoughtfully selected and ready to make yours.";
@@ -354,11 +414,17 @@
   detailBackdrop.addEventListener("click", event => { if (event.target === detailBackdrop) closeProductDetail(); });
   $("#detail-thumbnails").addEventListener("click", event => {
     const thumbnail = event.target.closest("[data-detail-image]");
-    if (!thumbnail) return;
-    $("#detail-main-image").src = resolveProductImage(thumbnail.dataset.detailImage);
-    $("#detail-thumbnails").querySelectorAll(".detail-thumbnail").forEach(button => button.classList.toggle("active", button === thumbnail));
+    if (thumbnail) showDetailPhoto(thumbnail.dataset.detailImage);
   });
-  $("#detail-colors").addEventListener("click", event => { const button = event.target.closest("[data-detail-color]"); if (button) { detailColor = button.dataset.detailColor; renderDetailOptions(); } });
+  $("#detail-colors").addEventListener("click", event => {
+    const button = event.target.closest("[data-detail-color]");
+    if (!button) return;
+    detailColor = button.dataset.detailColor;
+    showDetailPhoto(detailColorPhotos.get(detailColor) || resolveProductImage(detailProduct.image));
+    renderDetailOptions();
+    [...$("#detail-colors").querySelectorAll("[data-detail-color]")]
+      .find(swatch => swatch.dataset.detailColor === detailColor)?.focus({ preventScroll: true });
+  });
   $("#detail-sizes").addEventListener("click", event => { const button = event.target.closest("[data-detail-size]"); if (button) { detailSize = button.dataset.detailSize; renderDetailOptions(); } });
   $("#detail-variants").addEventListener("click", event => { const button = event.target.closest("[data-detail-variant]"); if (button) { detailVariant = button.dataset.detailVariant; renderDetailOptions(); } });
   $("#detail-add").addEventListener("click", () => { if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return; addProductToCart(detailProduct, detailColor, detailSize, detailVariant); closeProductDetail(); setDrawer(true); });
