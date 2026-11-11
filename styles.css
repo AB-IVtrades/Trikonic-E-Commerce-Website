@@ -149,7 +149,7 @@ body.mobile-nav-open{overflow:hidden}
 }
 .hero-controls { display: flex; justify-content: center; align-items: center; gap: 4px; margin-top: 18px; }
 .hero-controls[hidden], .home-products[hidden], .clear-shop-collection[hidden] { display: none; }
-.hero-dot, .hero-playback {
+.hero-dot {
   display: grid;
   place-items: center;
   min-width: 30px;
@@ -169,16 +169,6 @@ body.mobile-nav-open{overflow:hidden}
   transition: width .2s, background .2s;
 }
 .hero-dot[aria-pressed="true"]::before { width: 22px; background: white; }
-.hero-playback { min-width: 44px; }
-.hero-playback span {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid #ffffff80;
-  border-radius: 50%;
-  font-size: 12px;
-}
 .hero-controls button:focus-visible { outline: 2px solid white; outline-offset: -3px; border-radius: 8px; }
 
 .home-discovery { background: white; padding: clamp(30px, 5vw, 64px) max(5%, calc((100% - 1400px) / 2)); }

@@ -1194,17 +1194,15 @@
   if (heroControls) {
     const slides = [...document.querySelectorAll(".hero-slide")];
     const dots = [...heroControls.querySelectorAll(".hero-dot")];
-    const playback = heroControls.querySelector(".hero-playback");
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let active = 0;
     let requested = 0;
     let timer;
-    let playing = !reducedMotion.matches;
 
     function scheduleSlide() {
       clearTimeout(timer);
-      if (playing && !document.hidden) {
-        timer = setTimeout(() => showSlide((requested + 1) % slides.length), 20000);
+      if (!reducedMotion.matches && !document.hidden) {
+        timer = setTimeout(() => showSlide((requested + 1) % slides.length), 3000);
       }
     }
 
@@ -1222,20 +1220,11 @@
       active = index;
     }
 
-    function updatePlayback() {
-      playback.setAttribute("aria-label", playing ? "Pause slideshow" : "Play slideshow");
-      playback.firstElementChild.textContent = playing ? "Ⅱ" : "▶";
-      scheduleSlide();
-    }
-
     dots.forEach((dot, index) => dot.addEventListener("click", () => showSlide(index)));
-    playback.addEventListener("click", () => { playing = !playing; updatePlayback(); });
-    reducedMotion.addEventListener("change", event => {
-      if (event.matches) { playing = false; updatePlayback(); }
-    });
+    reducedMotion.addEventListener("change", scheduleSlide);
     document.addEventListener("visibilitychange", scheduleSlide);
     heroControls.hidden = false;
-    updatePlayback();
+    scheduleSlide();
   }
   // Informational pages keep the shared app shell for account/cart controls, but
   // don't need a catalog request. Avoid an Apps Script round trip on those pages.
