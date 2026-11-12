@@ -673,7 +673,7 @@
     const isAdmin = isStoreAdmin();
     const scheduledClosure = outsideStoreHours();
     lastScheduledClosure = scheduledClosure;
-    const showScreen = (manualMaintenance || scheduledClosure) && !isAdmin;
+    const showScreen = (manualMaintenance || scheduledClosure) && !isAdmin && !profilePage;
     const screen = $("#maintenance-screen");
     if (showScreen && screen.hidden) {
       setMobileNav(false);
@@ -718,15 +718,26 @@
     manualMaintenance = Boolean(data.maintenance_mode);
     renderMaintenanceMode();
   });
-  function openAccount(mode = "signin") { setAuthMode(mode); accountBackdrop.classList.add("show"); accountBackdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("no-scroll"); if (signedInUser) loadOrderHistory(); }
   const profilePage = $("#profile-page");
+  let orderView = "tracking";
+  let accountOrders = [];
+  let orderLoadId = 0;
   let profileUserId = null;
   let avatarVersion = "";
   let avatarUrl = "";
   let authReady = !supabaseClient;
 
+  function openAccount(mode = "signin", view = "tracking") {
+    setAuthMode(mode);
+    selectOrderView(view);
+    accountBackdrop.classList.add("show");
+    accountBackdrop.setAttribute("aria-hidden", "false");
+    document.body.classList.add("no-scroll");
+    if (signedInUser && !passwordRecoveryMode) loadOrderHistory();
+  }
+
   function showProfile() {
-    if (!signedInUser) openAccount("signup");
+    if (authReady && !signedInUser) openAccount("signup");
     else if (profilePage) $("#profile-details-title").scrollIntoView({ block: "nearest" });
     else location.assign("profile.html");
   }
@@ -805,7 +816,7 @@
 
   if (profilePage) {
     $("#profile-signin").addEventListener("click", () => openAccount("signin"));
-    $("#profile-orders").addEventListener("click", () => openAccount());
+    $("#profile-orders").addEventListener("click", () => openAccount("signin", "history"));
     $("#profile-signout").addEventListener("click", () => signOut($("#profile-details-status")));
     $("#profile-details-form").addEventListener("submit", event => {
       event.preventDefault();
@@ -858,7 +869,15 @@
 
   function renderAccountState() {
     const showAuth = !signedInUser || passwordRecoveryMode;
-    $("#account-backdrop .account-modal").classList.toggle("account-auth-mode", showAuth);
+    const modal = $("#account-backdrop .account-modal");
+    modal.classList.toggle("account-auth-mode", showAuth);
+    modal.setAttribute("aria-labelledby", showAuth ? "account-title" : "account-title-signed");
+    if (profileUserId !== (signedInUser?.id || null)) {
+      accountOrders = [];
+      orderLoadId++;
+      $("#orders-status").textContent = "";
+      renderOrders();
+    }
     renderProfile();
     $("#account-open").setAttribute("aria-label", signedInUser ? "My account" : "Sign in or create an account");
     $("#account-menu-auth").textContent = signedInUser ? "My profile" : "Sign in or create account";
@@ -868,21 +887,63 @@
     if (signedInUser) $("#account-email").textContent = signedInUser.email || "Signed in";
     renderMaintenanceMode();
   }
+  function selectOrderView(view) {
+    orderView = view;
+    const tracking = view === "tracking";
+    const title = tracking ? "Track your orders" : "Order history";
+    for (const [selector, active] of [["#account-side-track", tracking], ["#account-side-history", !tracking]]) {
+      const button = $(selector);
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    $(".account-breadcrumb strong").textContent = title;
+    $("#account-title-signed").textContent = title;
+    $(".account-page-main .modal-copy").textContent = tracking
+      ? "Check the latest status of your active orders."
+      : "View your delivered and cancelled orders.";
+    $(".account-orders-heading h3").textContent = tracking ? "Active orders" : "Past orders";
+    renderOrders();
+  }
+
   async function loadOrderHistory() {
-    const history = $("#order-history");
+    const userId = signedInUser?.id;
+    if (!userId || !supabaseClient) return;
+    const loadId = ++orderLoadId;
     const status = $("#orders-status");
-    if (!signedInUser || !supabaseClient) return;
     status.textContent = "Loading your orders…";
-    const { data, error } = await supabaseClient.from("orders").select("id,order_number,items,estimated_total,currency,status,payment_status,created_at,order_status_events(status,created_at)").order("created_at", { ascending: false }).limit(25);
-    if (error) { status.textContent = "We couldn’t load your order history. Please try again."; return; }
+    const orders = [];
+    const pageSize = 100;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabaseClient.from("orders")
+        .select("id,order_number,items,estimated_total,currency,status,payment_status,created_at,order_status_events(status,created_at)")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }).order("id")
+        .range(offset, offset + pageSize - 1);
+      if (loadId !== orderLoadId || signedInUser?.id !== userId) return;
+      if (error) { status.textContent = "We couldn’t load your orders. Please try again."; return; }
+      orders.push(...data);
+      if (data.length < pageSize) break;
+    }
+    accountOrders = orders;
     status.textContent = paymentReturned ? "Paystack has returned you to Trikonic. Payment status updates after secure verification; refresh shortly if it still says pending." : "";
-    if (!data.length) { history.innerHTML = '<p class="account-empty">No order requests yet. Your requests will appear here.</p>'; return; }
+    renderOrders();
+  }
+
+  function renderOrders() {
+    const history = $("#order-history");
     const stages = ["Order Received", "Payment Made", "Order Placed", "Order Shipped", "Order Arrived in Ghana", "Order Arrived at Warehouse", "Order Ready for Collection", "Order Delivered"];
     const normalized = value => String(value || "Order Received").trim().toLowerCase().replace(/[ _-]+/g, " ");
     const legacyStatusLabels = { new: "Order Received", confirmed: "Payment Made", preparing: "Order Placed", "in transit": "Order Shipped", delivered: "Order Delivered", cancelled: "Order Cancelled", "order cancelled": "Order Cancelled" };
     const displayStatus = value => legacyStatusLabels[normalized(value)] || stages.find(stage => normalized(stage) === normalized(value)) || "Order Received";
     const formatStamp = value => value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
-    history.innerHTML = data.map(order => {
+    const isFinished = status => ["Order Delivered", "Order Cancelled"].includes(status);
+    const tracking = orderView === "tracking";
+    const orders = accountOrders.filter(order => tracking ? !isFinished(displayStatus(order.status)) : isFinished(displayStatus(order.status)));
+    if (!orders.length) {
+      history.innerHTML = tracking ? '<p class="account-empty">You have no active orders.</p>' : '<p class="account-empty">You have no delivered or cancelled orders yet.</p>';
+      return;
+    }
+    history.innerHTML = orders.map(order => {
       const date = new Date(order.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
       const lineItems = Array.isArray(order.items) ? order.items : [];
       const summary = lineItems.map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? ` (${[item.color, item.size].filter(Boolean).map(escapeHtml).join(", ")})` : ""}`).join(" · ");
@@ -900,9 +961,9 @@
         }).join("")}</ol>`;
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
       const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
-      const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && current !== "Order Cancelled";
+      const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && !isFinished(current);
       const paymentLine = order.payment_status === "paid" ? '<p class="order-payment-state paid">Payment confirmed</p>' : unpaid ? `<p class="order-payment-state">Payment pending · Shipping included</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
-      return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">View order tracking <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
+      return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">${tracking ? "View order tracking" : "View order details"} <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
     }).join("");
   }
   $("#order-history").addEventListener("click", async event => {
@@ -967,10 +1028,16 @@
     $("#account-open").setAttribute("aria-expanded", String(open));
   }
   $("#account-open").addEventListener("click", () => setAccountPopover(accountPopover.hidden));
-  $("#account-menu-auth").addEventListener("click", () => { setAccountPopover(false); showProfile(); });
-  $("#account-menu-history").addEventListener("click", () => { setAccountPopover(false); openAccount("signin"); });
-  $("#account-side-track").addEventListener("click", event => { document.querySelectorAll(".account-side-link").forEach(link => link.classList.remove("active")); event.currentTarget.classList.add("active"); $("#order-history").scrollIntoView({ block: "nearest" }); });
-  $("#account-side-history").addEventListener("click", event => { document.querySelectorAll(".account-side-link").forEach(link => link.classList.remove("active")); event.currentTarget.classList.add("active"); $("#order-history").scrollIntoView({ block: "nearest" }); });
+  $("#account-menu-auth").addEventListener("click", event => {
+    if (authReady && !signedInUser) {
+      event.preventDefault();
+      showProfile();
+    }
+    setAccountPopover(false);
+  });
+  $("#account-menu-history").addEventListener("click", () => { setAccountPopover(false); openAccount("signin", "history"); });
+  $("#account-side-track").addEventListener("click", () => selectOrderView("tracking"));
+  $("#account-side-history").addEventListener("click", () => selectOrderView("history"));
   document.addEventListener("click", event => { if (!event.target.closest(".account-menu-wrap")) setAccountPopover(false); });
   $("#maintenance-admin-open").addEventListener("click", () => openAccount("signin"));
   $("#footer-track-order")?.addEventListener("click", () => openAccount("signin"));
