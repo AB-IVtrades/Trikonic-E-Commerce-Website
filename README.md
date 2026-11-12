@@ -44,7 +44,7 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 - `Photo URL`: a publicly accessible image URL, or a repository path such as `images/raffia-tote.webp`.
 - `Availability`: choose `In Stock`, `Pre-Order`, or `Out of Stock` from the dropdown. Out-of-stock items remain visible but cannot be added to the bag, and customers can deselect or remove those items from their cart before checkout.
 - `Stock Quantity`: enter the total number of units across all colours and sizes for an in-stock product. For example, enter `8` to show “8 in stock” on the product card and detail view. Enter `0` to show “Out of stock”, or leave the cell blank to show “In stock” without a number. Pre-order items continue to show “Pre-order”. Update the count in the sheet as stock changes.
-- `Shipping Fee (USD)`: optional fee per unit, converted using **Pricing Settings → B2**. Leave it blank to use an existing **Shipping Fee (GHS)**. Leave both blank if shipping is included in the product price.
+- `Shipping Fee (USD)`: optional fee per checkout item (regardless of quantity), converted using **Pricing Settings → B2**. Leave it blank to use an existing **Shipping Fee (GHS)**. Leave both blank if shipping is included in the product price.
 - `Tag` and `Card Color`: optional display styling; card color can be a hex value such as `#e5dcd0`.
 - `Show on website`: enter `TRUE` to publish that row or `FALSE` to hide it.
 - `Flash Sale`: choose `TRUE` while the item should be discounted; choose `FALSE` (or leave it off) to show its regular price.
@@ -73,7 +73,7 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Shipping fees entered in **Website Catalog** are charged per unit and shown separately in GHS before payment. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
+Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Shipping fees entered in **Website Catalog** are charged once per checkout item, regardless of quantity, and shown separately in GHS before payment. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
 
 To connect the order form and product catalog to the existing Sheet:
 
@@ -140,4 +140,4 @@ Before testing, replace the Apps Script editor contents with this repository's `
 
 For optional SMS order-number notices, set up a Hubtel SMS account and approved sender ID, then add `HUBTEL_SMS_CLIENT_ID`, `HUBTEL_SMS_CLIENT_SECRET`, and `HUBTEL_SMS_SENDER_ID` as Supabase Edge Function secrets. A valid Ghana mobile number must be entered in the order contact field. Without these Hubtel secrets, email notifications still work.
 
-Before taking real payments, complete Paystack business activation and test card/mobile-money flows, failed payments, retries, and spreadsheet status updates. The total currently charged is the item subtotal; the shipping fee is collected separately after delivery is confirmed.
+Before taking real payments, complete Paystack business activation and test card/mobile-money flows, failed payments, retries, and spreadsheet status updates. The total charged is the item subtotal plus one shipping fee per checkout item, regardless of quantity.

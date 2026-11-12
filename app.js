@@ -106,7 +106,8 @@
         id: product.id, name: product.name, color, size, variant, availability: product.availability,
         flashSale: onSale, quantity, unitPrice: current, originalUnitPrice: regular,
         lineTotal: Math.round(current * 100) * quantity / 100,
-        shippingTotal: Number.isFinite(shippingRate) && shippingRate >= 0 ? Math.round(shippingRate * 100) * quantity / 100 : null
+        // Charge shipping once for this cart line, regardless of quantity.
+        shippingTotal: Number.isFinite(shippingRate) && shippingRate >= 0 ? Math.round(shippingRate * 100) / 100 : null
       };
     }).filter(Boolean);
   }

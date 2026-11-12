@@ -286,7 +286,7 @@ function setupTrikonicCatalogSheet() {
       SpreadsheetApp.newDataValidation()
         .requireNumberGreaterThanOrEqualTo(0)
         .setAllowInvalid(false)
-        .setHelpText("Enter shipping per unit in the column's currency. A USD fee takes priority if both columns are filled.")
+        .setHelpText("Enter shipping once per checkout item in the column's currency, regardless of quantity. A USD fee takes priority if both columns are filled.")
         .build()
     );
   });
