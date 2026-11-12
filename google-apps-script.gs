@@ -5,6 +5,9 @@
  */
 const SHEET_NAME = "Trikonic Orders";
 const CATALOG_SHEET_NAME = "Website Catalog";
+const PRICING_SETTINGS_SHEET = "Pricing Settings";
+const EXCHANGE_RATE_CELL = "B2";
+const USD_PRICE_HEADERS = ["Selling Price (USD)", "Sale Price (USD)", "Variant Prices (USD)"];
 const STOCK_QUANTITY_HEADER = "Stock Quantity";
 const SHIPPING_FEE_HEADER = "Shipping Fee (GHS)";
 const SPREADSHEET_ID = "1LDHrm-o9rVYudKTlaA8Jot8F3cMN2Wl1d3hiz7ohvVc";
@@ -25,6 +28,8 @@ function doGet(e) {
     const products = [];
     const ready = Boolean(catalogSheet && catalogSheet.getLastRow() > 1);
     if (ready) {
+      const rate = spreadsheet.getSheetByName(PRICING_SETTINGS_SHEET)?.getRange(EXCHANGE_RATE_CELL).getValue();
+      const validRate = typeof rate === "number" && Number.isFinite(rate) && rate > 0;
       const inventoryRows = inventorySheet ? inventorySheet.getDataRange().getValues() : [];
       const headers = (inventoryRows[2] || []).map(value => String(value).trim().toLowerCase());
       const skuIndex = headers.findIndex(value => value === "sku");
@@ -32,13 +37,13 @@ function doGet(e) {
       const categoryIndex = headers.findIndex(value => value === "category");
       const priceIndex = headers.findIndex(value => value === "selling price");
       const inventory = new Map();
-      if ([skuIndex, nameIndex, categoryIndex, priceIndex].every(index => index >= 0)) {
+      if ([skuIndex, nameIndex, categoryIndex].every(index => index >= 0)) {
         inventoryRows.slice(3).forEach(row => {
           const sku = String(row[skuIndex] || "").trim();
           const name = String(row[nameIndex] || "").trim();
           const rawPrice = row[priceIndex];
           const price = typeof rawPrice === "number" ? rawPrice : Number(String(rawPrice).replace(/[^0-9.-]/g, ""));
-          if (sku && name && Number.isFinite(price) && price > 0) {
+          if (sku && name) {
             inventory.set(sku, { name, category: String(row[categoryIndex] || "Other").trim(), price });
           }
         });
@@ -53,6 +58,19 @@ function doGet(e) {
         const isVisible = visible === true || ["true", "yes", "1"].includes(String(visible).trim().toLowerCase());
         const product = inventory.get(String(sku || "").trim());
         if (!isVisible || !product || !image) return;
+        const usdPrice = value(USD_PRICE_HEADERS[0]);
+        const pricedInUsd = usdPrice !== "";
+        const catalogPrice = raw => {
+          const price = typeof raw === "number" ? raw : Number(String(raw || "").replace(/[^0-9.-]/g, ""));
+          if (!Number.isFinite(price) || price <= 0) return null;
+          return pricedInUsd ? Math.round(price * rate * 100) / 100 : price;
+        };
+        if (pricedInUsd && !validRate) {
+          console.error("Enter a valid USD to GHS rate in Pricing Settings!B2 to publish USD-priced products.");
+          return;
+        }
+        const price = pricedInUsd ? catalogPrice(usdPrice) : product.price;
+        if (!Number.isFinite(price) || price <= 0) return;
         const availabilityValue = String(rawAvailability || "in_stock").trim().toLowerCase().replace(/[\s_-]/g, "");
         const rawStockQuantity = value(STOCK_QUANTITY_HEADER);
         const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
@@ -63,18 +81,17 @@ function doGet(e) {
           : null;
         const flashValue = value("Flash Sale");
         const flashSaleRequested = flashValue === true || ["true", "yes", "1", "active"].includes(String(flashValue).trim().toLowerCase());
-        const rawSalePrice = value("Sale Price (GHS)");
-        const salePrice = typeof rawSalePrice === "number" ? rawSalePrice : Number(String(rawSalePrice || "").replace(/[^0-9.-]/g, ""));
+        const salePrice = catalogPrice(value(pricedInUsd ? USD_PRICE_HEADERS[1] : "Sale Price (GHS)"));
         const parseOptions = raw => [...new Set(String(raw || "").split(/[,;\n]/).map(option => option.trim()).filter(Boolean))];
         const colors = parseOptions(value("Available Colors"));
         const sizes = parseOptions(value("Available Sizes"));
         const normalizeOption = option => String(option || "").trim().toLowerCase().replace(/\s+/g, " ");
-        const variantPrices = String(value("Variant Prices (GHS)") || "").split(/[;,\n]/).map(entry => {
+        const variantPrices = String(value(pricedInUsd ? USD_PRICE_HEADERS[2] : "Variant Prices (GHS)") || "").split(/[;,\n]/).map(entry => {
           const separator = entry.lastIndexOf(":");
           if (separator < 0) return null;
           const options = entry.slice(0, separator).split("|").map(option => option.trim());
           const rawPrice = entry.slice(separator + 1).trim();
-          const price = Number(rawPrice.replace(/[^0-9.-]/g, ""));
+          const price = catalogPrice(rawPrice);
           if (options.length > 2 || !Number.isFinite(price) || price <= 0) return null;
           if (options.length === 2) return { color: options[0], size: options[1], price };
           const option = options[0] || "";
@@ -85,7 +102,7 @@ function doGet(e) {
           if (isSize) return { color: "", size: option, price };
           return { color: "", size: "", label: option, price };
         }).filter(Boolean);
-        const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < product.price;
+        const flashSale = flashSaleRequested && Number.isFinite(salePrice) && salePrice > 0 && salePrice < price;
         const photos = [...new Set([image, ...String(value("Additional Photos") || "").split(/[;,\r\n]+/)].map(photo => String(photo || "").trim()).filter(Boolean))];
         const specs = String(value("Product Specs") || "").split(/[;\n]/).map(line => {
           const separator = line.indexOf(":");
@@ -94,7 +111,7 @@ function doGet(e) {
         const safeColor = /^#[0-9a-f]{6}$/i.test(String(color).trim()) ? String(color).trim() : "#e8e4dc";
         products.push({
           id: String(sku).trim(), name: product.name, category: product.category,
-          price: product.price, originalPrice: product.price, salePrice: flashSale ? salePrice : null, flashSale,
+          price, originalPrice: price, salePrice: flashSale ? salePrice : null, flashSale,
           description: String(description || "").trim(), image: String(image).trim(), images: photos, specs, availability,
           stockQuantity: availability === "in_stock" ? stockQuantity : null,
           colors, sizes, variantPrices, shippingFee,
@@ -222,6 +239,10 @@ function cancelOrderInSheet(payload) {
 // Run once to add missing catalog columns and refresh validation rules.
 function setupTrikonicCatalogSheet() {
   const spreadsheet = getTrikonicSpreadsheet_();
+  const pricingSettings = spreadsheet.getSheetByName(PRICING_SETTINGS_SHEET) || spreadsheet.insertSheet(PRICING_SETTINGS_SHEET);
+  pricingSettings.getRange("A2").setValue("GHS per US$1");
+  const positiveNumberRule = SpreadsheetApp.newDataValidation().requireNumberGreaterThan(0).setAllowInvalid(false).build();
+  pricingSettings.getRange(EXCHANGE_RATE_CELL).setNumberFormat("0.0000").setDataValidation(positiveNumberRule);
   const sheet = spreadsheet.getSheetByName(CATALOG_SHEET_NAME) || spreadsheet.insertSheet(CATALOG_SHEET_NAME);
   ensureCatalogHeaders(sheet);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(value => String(value).trim().toLowerCase());
@@ -234,6 +255,11 @@ function setupTrikonicCatalogSheet() {
   const shippingColumn = headers.indexOf(SHIPPING_FEE_HEADER.toLowerCase()) + 1;
   const stockQuantityColumn = headers.indexOf(STOCK_QUANTITY_HEADER.toLowerCase()) + 1;
   const rows = Math.max(sheet.getMaxRows() - 1, 1);
+  USD_PRICE_HEADERS.slice(0, 2).forEach(header => {
+    const column = headers.indexOf(header.toLowerCase()) + 1;
+    sheet.getRange(2, column, rows, 1).setNumberFormat("0.00").setDataValidation(positiveNumberRule);
+  });
+  sheet.getRange(2, headers.indexOf(USD_PRICE_HEADERS[2].toLowerCase()) + 1, rows, 1).clearDataValidations();
   sheet.getRange(2, availabilityColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(["In Stock", "Pre-Order", "Out of Stock"], true).setAllowInvalid(false).build()
   );
@@ -271,9 +297,10 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER, SHIPPING_FEE_HEADER].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER, SHIPPING_FEE_HEADER, ...USD_PRICE_HEADERS].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
+      if (nextColumn > sheet.getMaxColumns()) sheet.insertColumnAfter(sheet.getMaxColumns());
       sheet.getRange(1, nextColumn).setValue(header);
       current.push(header.toLowerCase());
     }
