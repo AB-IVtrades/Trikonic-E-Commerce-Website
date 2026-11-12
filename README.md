@@ -44,7 +44,7 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 - `Photo URL`: a publicly accessible image URL, or a repository path such as `images/raffia-tote.webp`.
 - `Availability`: choose `In Stock`, `Pre-Order`, or `Out of Stock` from the dropdown. Out-of-stock items remain visible but cannot be added to the bag, and customers can deselect or remove those items from their cart before checkout.
 - `Stock Quantity`: enter the total number of units across all colours and sizes for an in-stock product. For example, enter `8` to show “8 in stock” on the product card and detail view. Enter `0` to show “Out of stock”, or leave the cell blank to show “In stock” without a number. Pre-order items continue to show “Pre-order”. Update the count in the sheet as stock changes.
-- `Shipping Fee (GHS)`: optional rate per unit. Leave it blank if shipping is included in the product price.
+- `Shipping Fee (USD)`: optional fee per unit, converted using **Pricing Settings → B2**. Leave it blank to use an existing **Shipping Fee (GHS)**. Leave both blank if shipping is included in the product price.
 - `Tag` and `Card Color`: optional display styling; card color can be a hex value such as `#e5dcd0`.
 - `Show on website`: enter `TRUE` to publish that row or `FALSE` to hide it.
 - `Flash Sale`: choose `TRUE` while the item should be discounted; choose `FALSE` (or leave it off) to show its regular price.
@@ -64,7 +64,7 @@ Only rows marked `TRUE` with a matching SKU, photo, and valid selling price are 
 
 To base prices on USD, enter the number of Ghana cedis per US dollar in **Pricing Settings → B2**. In **Website Catalog**, enter each product’s **Selling Price (USD)** and copy any applicable sale or variant prices into **Sale Price (USD)** or **Variant Prices (USD)** using the same variant rule syntax. USD-priced rows use those USD fields and require a positive exchange rate to appear in the catalog. Leave **Selling Price (USD)** blank for rows that use the existing GHS pricing fields.
 
-The catalog converts each USD unit price to GHS and rounds to the nearest pesewa before calculating the cart total. Enter shipping separately in **Shipping Fee (GHS)**. The public catalog, cart, checkout, and Paystack all use GHS. Updating the rate changes prices the next time the storefront loads the catalog. Saved orders retain their original GHS amounts.
+The catalog converts each USD unit price and USD shipping fee to GHS and rounds each to the nearest pesewa before calculating the cart total. The public catalog, cart, checkout, and Paystack all use GHS. Updating the rate changes prices the next time the storefront loads the catalog. Saved orders retain their original GHS amounts.
 
 For photos stored with the website, upload optimized JPG/WebP files to an `images` folder in the repository, then enter that relative path in the sheet (for example `images/set-of-basic-tops.jpeg`). A bare filename is also treated as an image inside `images/`. Keep images reasonably small (around 300 KB where practical). The hero and story photos are separate; change those `<img src="...">` values in `index.html` when you have brand photos. The storefront waits for the live sheet catalog instead of briefly showing sample products.
 
@@ -72,7 +72,7 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. A rate in the Website Catalog’s `Shipping Fee (GHS)` column is charged per unit and shown separately before payment. Leave it blank for products whose existing prices already include shipping. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
+Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Shipping fees entered in **Website Catalog** are charged per unit and shown separately in GHS before payment. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
 
 To connect the order form and product catalog to the existing Sheet:
 

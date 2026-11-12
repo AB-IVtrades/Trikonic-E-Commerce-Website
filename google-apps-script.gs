@@ -10,6 +10,7 @@ const EXCHANGE_RATE_CELL = "B2";
 const USD_PRICE_HEADERS = ["Selling Price (USD)", "Sale Price (USD)", "Variant Prices (USD)"];
 const STOCK_QUANTITY_HEADER = "Stock Quantity";
 const SHIPPING_FEE_HEADER = "Shipping Fee (GHS)";
+const USD_SHIPPING_FEE_HEADER = "Shipping Fee (USD)";
 const SPREADSHEET_ID = "1LDHrm-o9rVYudKTlaA8Jot8F3cMN2Wl1d3hiz7ohvVc";
 const STATUS_SYNC_URL = "https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync";
 const STATUS_SYNC_PROPERTY = "TRIKONIC_STATUS_SYNC_TOKEN";
@@ -60,13 +61,16 @@ function doGet(e) {
         if (!isVisible || !product || !image) return;
         const usdPrice = value(USD_PRICE_HEADERS[0]);
         const pricedInUsd = usdPrice !== "";
+        const usdShippingFee = value(USD_SHIPPING_FEE_HEADER);
+        const shippingInUsd = usdShippingFee !== "";
+        const toGhs = amount => Math.round(amount * rate * 100) / 100;
         const catalogPrice = raw => {
           const price = typeof raw === "number" ? raw : Number(String(raw || "").replace(/[^0-9.-]/g, ""));
           if (!Number.isFinite(price) || price <= 0) return null;
-          return pricedInUsd ? Math.round(price * rate * 100) / 100 : price;
+          return pricedInUsd ? toGhs(price) : price;
         };
-        if (pricedInUsd && !validRate) {
-          console.error("Enter a valid USD to GHS rate in Pricing Settings!B2 to publish USD-priced products.");
+        if ((pricedInUsd || shippingInUsd) && !validRate) {
+          console.error("Enter a valid USD to GHS rate in Pricing Settings!B2 to publish products with USD pricing or shipping.");
           return;
         }
         const price = pricedInUsd ? catalogPrice(usdPrice) : product.price;
@@ -75,9 +79,14 @@ function doGet(e) {
         const rawStockQuantity = value(STOCK_QUANTITY_HEADER);
         const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
         const availability = availabilityValue === "preorder" ? "preorder" : availabilityValue === "outofstock" || stockQuantity === 0 ? "out_of_stock" : "in_stock";
-        const rawShippingFee = value(SHIPPING_FEE_HEADER);
-        const shippingFee = typeof rawShippingFee === "number" && Number.isFinite(rawShippingFee) && rawShippingFee >= 0
-          ? Math.round(rawShippingFee * 100) / 100
+        const rawShippingFee = shippingInUsd ? usdShippingFee : value(SHIPPING_FEE_HEADER);
+        const validShippingFee = typeof rawShippingFee === "number" && Number.isFinite(rawShippingFee) && rawShippingFee >= 0;
+        if (shippingInUsd && (!validShippingFee || !Number.isFinite(toGhs(rawShippingFee)))) {
+          console.error("Enter a valid non-negative amount in Shipping Fee (USD).");
+          return;
+        }
+        const shippingFee = validShippingFee
+          ? (shippingInUsd ? toGhs(rawShippingFee) : Math.round(rawShippingFee * 100) / 100)
           : null;
         const flashValue = value("Flash Sale");
         const flashSaleRequested = flashValue === true || ["true", "yes", "1", "active"].includes(String(flashValue).trim().toLowerCase());
@@ -252,7 +261,6 @@ function setupTrikonicCatalogSheet() {
   const colorsColumn = headers.indexOf("available colors") + 1;
   const sizesColumn = headers.indexOf("available sizes") + 1;
   const variantPricesColumn = headers.indexOf("variant prices (ghs)") + 1;
-  const shippingColumn = headers.indexOf(SHIPPING_FEE_HEADER.toLowerCase()) + 1;
   const stockQuantityColumn = headers.indexOf(STOCK_QUANTITY_HEADER.toLowerCase()) + 1;
   const rows = Math.max(sheet.getMaxRows() - 1, 1);
   USD_PRICE_HEADERS.slice(0, 2).forEach(header => {
@@ -269,13 +277,16 @@ function setupTrikonicCatalogSheet() {
   sheet.getRange(2, salePriceColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireNumberGreaterThan(0).setAllowInvalid(false).build()
   );
-  sheet.getRange(2, shippingColumn, rows, 1).setNumberFormat("0.00").setDataValidation(
-    SpreadsheetApp.newDataValidation()
-      .requireNumberGreaterThanOrEqualTo(0)
-      .setAllowInvalid(false)
-      .setHelpText("Enter shipping per unit in GHS. Leave blank if shipping is included in the item price.")
-      .build()
-  );
+  [SHIPPING_FEE_HEADER, USD_SHIPPING_FEE_HEADER].forEach(header => {
+    const column = headers.indexOf(header.toLowerCase()) + 1;
+    sheet.getRange(2, column, rows, 1).setNumberFormat("0.00").setDataValidation(
+      SpreadsheetApp.newDataValidation()
+        .requireNumberGreaterThanOrEqualTo(0)
+        .setAllowInvalid(false)
+        .setHelpText("Enter shipping per unit in the column's currency. A USD fee takes priority if both columns are filled.")
+        .build()
+    );
+  });
   const stockCell = sheet.getRange(2, stockQuantityColumn).getA1Notation();
   sheet.getRange(2, stockQuantityColumn, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
@@ -297,7 +308,7 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER, SHIPPING_FEE_HEADER, ...USD_PRICE_HEADERS].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER, SHIPPING_FEE_HEADER, ...USD_PRICE_HEADERS, USD_SHIPPING_FEE_HEADER].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
       if (nextColumn > sheet.getMaxColumns()) sheet.insertColumnAfter(sheet.getMaxColumns());
