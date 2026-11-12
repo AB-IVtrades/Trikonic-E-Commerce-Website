@@ -11,6 +11,7 @@ const USD_PRICE_HEADERS = ["Selling Price (USD)", "Sale Price (USD)", "Variant P
 const STOCK_QUANTITY_HEADER = "Stock Quantity";
 const SHIPPING_FEE_HEADER = "Shipping Fee (GHS)";
 const USD_SHIPPING_FEE_HEADER = "Shipping Fee (USD)";
+const PRODUCT_TYPES_HEADER = "Product Types";
 const SPREADSHEET_ID = "1LDHrm-o9rVYudKTlaA8Jot8F3cMN2Wl1d3hiz7ohvVc";
 const STATUS_SYNC_URL = "https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync";
 const STATUS_SYNC_PROPERTY = "TRIKONIC_STATUS_SYNC_TOKEN";
@@ -94,6 +95,7 @@ function doGet(e) {
         const parseOptions = raw => [...new Set(String(raw || "").split(/[,;\n]/).map(option => option.trim()).filter(Boolean))];
         const colors = parseOptions(value("Available Colors"));
         const sizes = parseOptions(value("Available Sizes"));
+        const types = parseOptions(value(PRODUCT_TYPES_HEADER));
         const normalizeOption = option => String(option || "").trim().toLowerCase().replace(/\s+/g, " ");
         const variantPrices = String(value(pricedInUsd ? USD_PRICE_HEADERS[2] : "Variant Prices (GHS)") || "").split(/[;,\n]/).map(entry => {
           const separator = entry.lastIndexOf(":");
@@ -105,6 +107,7 @@ function doGet(e) {
           if (options.length === 2) return { color: options[0], size: options[1], price };
           const option = options[0] || "";
           const normalized = normalizeOption(option);
+          if (types.some(type => normalizeOption(type) === normalized)) return { label: option, price };
           const isColor = colors.some(color => normalizeOption(color) === normalized);
           const isSize = sizes.some(size => normalizeOption(size) === normalized) || /\d\s*[x×*]\s*\d/i.test(option);
           if (isColor) return { color: option, size: "", price };
@@ -123,7 +126,7 @@ function doGet(e) {
           price, originalPrice: price, salePrice: flashSale ? salePrice : null, flashSale,
           description: String(description || "").trim(), image: String(image).trim(), images: photos, specs, availability,
           stockQuantity: availability === "in_stock" ? stockQuantity : null,
-          colors, sizes, variantPrices, shippingFee,
+          colors, sizes, types, variantPrices, shippingFee,
           tag: String(tag || "").trim(), color: safeColor
         });
       });
@@ -299,6 +302,7 @@ function setupTrikonicCatalogSheet() {
   // inherited when the new columns were created or copied from another column.
   sheet.getRange(2, colorsColumn, rows, 1).clearDataValidations();
   sheet.getRange(2, sizesColumn, rows, 1).clearDataValidations();
+  sheet.getRange(2, headers.indexOf(PRODUCT_TYPES_HEADER.toLowerCase()) + 1, rows, 1).clearDataValidations();
   sheet.getRange(2, variantPricesColumn, rows, 1).clearDataValidations();
   sheet.setFrozenRows(1);
 }
@@ -308,7 +312,7 @@ function ensureCatalogHeaders(sheet) {
   if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
   const width = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const current = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value).trim().toLowerCase());
-  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER, SHIPPING_FEE_HEADER, ...USD_PRICE_HEADERS, USD_SHIPPING_FEE_HEADER].forEach(header => {
+  ["Flash Sale", "Sale Price (GHS)", "Available Colors", "Available Sizes", "Variant Prices (GHS)", "Additional Photos", "Product Specs", STOCK_QUANTITY_HEADER, SHIPPING_FEE_HEADER, ...USD_PRICE_HEADERS, USD_SHIPPING_FEE_HEADER, PRODUCT_TYPES_HEADER].forEach(header => {
     if (!current.includes(header.toLowerCase())) {
       const nextColumn = sheet.getLastColumn() + 1;
       if (nextColumn > sheet.getMaxColumns()) sheet.insertColumnAfter(sheet.getMaxColumns());

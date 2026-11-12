@@ -46,7 +46,10 @@
     return Number.isSafeInteger(quantity) && quantity > 0 ? `${quantity} in stock` : "In stock";
   }
   function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
-  function productVariantOptions(product) { return [...new Set((product?.variantPrices || []).map(option => String(option.label || "").trim()).filter(Boolean))]; }
+  function productVariantOptions(product) {
+    if (product?.types?.length) return product.types;
+    return [...new Set((product?.variantPrices || []).map(option => String(option.label || "").trim()).filter(Boolean))];
+  }
   function regularPriceFor(product, selection = {}) {
     const prices = product?.variantPrices || [];
     const color = normalizeVariantOption(selection.color), size = normalizeVariantOption(selection.size);
@@ -74,6 +77,10 @@
     const variants = productVariantOptions(product);
     return Boolean(product && matches(product.colors, selection.color) && matches(product.sizes, selection.size) && (!variants.length || variants.some(option => normalizeVariantOption(option) === normalizeVariantOption(selection.variant))));
   }
+  function cartItemIsUnavailable(product, selection) {
+    return !product || product.availability === "out_of_stock" ||
+      (product.types?.length > 0 && !cartSelectionIsValid(product, selection));
+  }
   function saveCart() {
     const entries = [...cart].filter(([, quantity]) => quantity > 0);
     try { localStorage.setItem(CART_KEY, JSON.stringify(entries)); } catch (_) {}
@@ -89,8 +96,9 @@
   function cartOrderItems(keys) {
     return keys.map(key => {
       const product = productForCartKey(key);
-      if (!product) return null;
-      const { color, size, variant } = parseCartKey(key);
+      const selection = parseCartKey(key);
+      if (cartItemIsUnavailable(product, selection)) return null;
+      const { color, size, variant } = selection;
       const { current, regular, onSale } = priceFor(product, { color, size, variant });
       const quantity = cart.get(key);
       const shippingRate = product.shippingFee == null ? null : Number(product.shippingFee);
@@ -338,7 +346,7 @@
     }
     const keys = selectedCartKeys();
     const items = cartOrderItems(keys);
-    const hasUnavailable = items.length !== keys.length || items.some(item => item.availability === "out_of_stock");
+    const hasUnavailable = items.length !== keys.length;
     const { subtotal, shipping, total } = orderTotals(items);
     $("#cart-selection-count").textContent = `${keys.length} of ${entries.length} selected for checkout`;
     $("#subtotal").textContent = money(subtotal);
@@ -352,7 +360,7 @@
       const selection = parseCartKey(key);
       const name = escapeHtml(product?.name || "Unavailable product");
       const itemKey = escapeAttr(key);
-      const unavailable = !product || product.availability === "out_of_stock";
+      const unavailable = cartItemIsUnavailable(product, selection);
       const options = [selection.color, selection.size, selection.variant].filter(Boolean).map(escapeHtml).join(" · ");
       const image = product && resolveProductImage(productGallery(product).colorPhotos.get(selection.color) || product.image);
       return `<article class="cart-page-item">
@@ -477,14 +485,17 @@
     if (!detailProduct) return;
     $("#detail-color-group").hidden = !detailProduct.colors?.length;
     $("#detail-size-group").hidden = !detailProduct.sizes?.length;
-    $("#detail-variant-group").hidden = !productVariantOptions(detailProduct).length;
+    const variants = productVariantOptions(detailProduct);
+    const hasTypes = detailProduct.types?.length > 0;
+    $("#detail-variant-group").hidden = !variants.length;
+    $("#detail-variant-group strong").textContent = hasTypes ? "Type" : "Option";
     $("#detail-color-label").textContent = detailColor ? `Selected: ${detailColor}` : "Choose a colour";
     $("#detail-size-label").textContent = detailSize ? `Selected: ${detailSize}` : "Choose a size";
-    $("#detail-variant-label").textContent = detailVariant ? `Selected: ${detailVariant}` : "Choose an option";
+    $("#detail-variant-label").textContent = detailVariant ? `Selected: ${detailVariant}` : hasTypes ? "Choose a type" : "Choose an option";
     $("#detail-colors").innerHTML = (detailProduct.colors || []).map(color => `<button type="button" class="detail-swatch ${color === detailColor ? "selected" : ""}" style="--swatch:${swatchFor(color)};--swatch-mark:${swatchMarkFor(color)}" data-detail-color="${escapeAttr(color)}" aria-label="${escapeAttr(color)}" aria-pressed="${color === detailColor}"><span class="visually-hidden">${escapeHtml(color)}</span></button>`).join("");
     $("#detail-sizes").innerHTML = (detailProduct.sizes || []).map(size => `<button type="button" class="detail-size ${size === detailSize ? "selected" : ""}" data-detail-size="${escapeAttr(size)}" aria-pressed="${size === detailSize}">${escapeHtml(size)}</button>`).join("");
-    $("#detail-variants").innerHTML = productVariantOptions(detailProduct).map(option => `<button type="button" class="detail-size ${option === detailVariant ? "selected" : ""}" data-detail-variant="${escapeAttr(option)}" aria-pressed="${option === detailVariant}">${escapeHtml(option)}</button>`).join("");
-    const missingChoice = Boolean((detailProduct.colors?.length && !detailColor) || (detailProduct.sizes?.length && !detailSize) || (productVariantOptions(detailProduct).length && !detailVariant));
+    $("#detail-variants").innerHTML = variants.map(option => `<button type="button" class="detail-size ${option === detailVariant ? "selected" : ""}" data-detail-variant="${escapeAttr(option)}" aria-pressed="${option === detailVariant}">${escapeHtml(option)}</button>`).join("");
+    const missingChoice = !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     const unavailable = detailProduct.availability === "out_of_stock";
     $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     $("#detail-add").disabled = unavailable || missingChoice;
@@ -539,7 +550,13 @@
       .find(swatch => swatch.dataset.detailColor === detailColor)?.focus({ preventScroll: true });
   });
   $("#detail-sizes").addEventListener("click", event => { const button = event.target.closest("[data-detail-size]"); if (button) { detailSize = button.dataset.detailSize; renderDetailOptions(); } });
-  $("#detail-variants").addEventListener("click", event => { const button = event.target.closest("[data-detail-variant]"); if (button) { detailVariant = button.dataset.detailVariant; renderDetailOptions(); } });
+  $("#detail-variants").addEventListener("click", event => {
+    const button = event.target.closest("[data-detail-variant]");
+    if (!button) return;
+    detailVariant = button.dataset.detailVariant;
+    renderDetailOptions();
+    $("#detail-variants [aria-pressed='true']")?.focus({ preventScroll: true });
+  });
   $("#detail-add").addEventListener("click", () => {
     if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return;
     addProductToCart(detailProduct, detailColor, detailSize, detailVariant);
@@ -557,9 +574,11 @@
     $("#variant-color-field").hidden = !product.colors?.length;
     $("#variant-size-field").hidden = !product.sizes?.length;
     $("#variant-option-field").hidden = !productVariantOptions(product).length;
+    const hasTypes = product.types?.length > 0;
+    $("#variant-option-field").firstChild.textContent = hasTypes ? "Type" : "Option";
     fillVariantSelect($("#variant-color"), product.colors || [], "colour");
     fillVariantSelect($("#variant-size"), product.sizes || [], "size");
-    fillVariantSelect($("#variant-option"), productVariantOptions(product), "option");
+    fillVariantSelect($("#variant-option"), productVariantOptions(product), hasTypes ? "type" : "option");
     $("#variant-status").textContent = "";
     updateVariantPickerPrice();
     variantBackdrop.classList.add("show");
@@ -592,7 +611,7 @@
     event.preventDefault();
     if (!pendingVariantProduct) return;
     const color = $("#variant-color").value, size = $("#variant-size").value, variant = $("#variant-option").value;
-    if ((pendingVariantProduct.colors?.length && !color) || (pendingVariantProduct.sizes?.length && !size) || (productVariantOptions(pendingVariantProduct).length && !variant)) {
+    if (!cartSelectionIsValid(pendingVariantProduct, { color, size, variant })) {
       $("#variant-status").textContent = "Choose the available options to continue.";
       return;
     }
@@ -610,7 +629,7 @@
     if (storefrontIsClosed() && !isStoreAdmin()) return;
     const keys = selectedCartKeys();
     const items = cartOrderItems(keys);
-    if (!items.length || items.length !== keys.length || items.some(item => item.availability === "out_of_stock")) return;
+    if (!items.length || items.length !== keys.length) return;
     const fields = $("#order-form").elements;
     if (!fields.name.value) fields.name.value = signedInUser?.user_metadata?.full_name || "";
     if (!fields.contact.value) fields.contact.value = signedInUser?.user_metadata?.checkout_phone || signedInUser?.email || "";
@@ -946,7 +965,7 @@
     history.innerHTML = orders.map(order => {
       const date = new Date(order.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
       const lineItems = Array.isArray(order.items) ? order.items : [];
-      const summary = lineItems.map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? ` (${[item.color, item.size].filter(Boolean).map(escapeHtml).join(", ")})` : ""}`).join(" · ");
+      const summary = lineItems.map(item => `${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size || item.variant ? ` (${[item.color, item.size, item.variant].filter(Boolean).map(escapeHtml).join(", ")})` : ""}`).join(" · ");
       const current = displayStatus(order.status);
       const canCancel = ["Order Received", "Payment Made", "Order Placed"].includes(current);
       const currentIndex = stages.findIndex(stage => normalized(stage) === normalized(current));
@@ -960,7 +979,7 @@
           return `<li class="${done ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><span class="progress-dot" aria-hidden="true"></span><span class="progress-copy"><strong>${escapeHtml(stage)}</strong>${when ? `<time>${escapeHtml(when)}</time>` : ""}</span></li>`;
         }).join("")}</ol>`;
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
-      const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
+      const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size || item.variant ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`, item.variant && `Option: ${item.variant}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
       const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && !isFinished(current);
       const paymentLine = order.payment_status === "paid" ? '<p class="order-payment-state paid">Payment confirmed</p>' : unpaid ? `<p class="order-payment-state">Payment pending · Shipping included</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
       return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">${tracking ? "View order tracking" : "View order details"} <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
@@ -1220,7 +1239,7 @@
     const form = new FormData(e.currentTarget);
     const keys = selectedCartKeys();
     const items = cartOrderItems(keys);
-    if (!items.length || items.length !== keys.length || items.some(item => item.availability === "out_of_stock")) {
+    if (!items.length || items.length !== keys.length) {
       status.textContent = "Review your cart and select available items before continuing.";
       return;
     }
