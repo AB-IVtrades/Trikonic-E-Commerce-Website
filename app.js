@@ -46,6 +46,25 @@
     return Number.isSafeInteger(quantity) && quantity > 0 ? `${quantity} in stock` : "In stock";
   }
   function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
+  function registerPhotoColors(product) {
+    const colors = new Map();
+    for (const color of product.colors || []) {
+      const label = String(color).trim();
+      if (label) colors.set(normalizeVariantOption(label), label);
+    }
+    // Explicit "Colour | URL" photo labels also define selectable colours.
+    // Bare gallery photos do not imply that a colour is available.
+    for (const entry of [product.image, ...(product.images || [])]) {
+      const photo = String(entry || "");
+      const separator = photo.indexOf("|");
+      if (separator < 1) continue;
+      const label = photo.slice(0, separator).trim();
+      const source = photo.slice(separator + 1).trim();
+      const key = normalizeVariantOption(label);
+      if (label && source && !/[|/:]/.test(label) && !colors.has(key)) colors.set(key, label);
+    }
+    return { ...product, colors: [...colors.values()] };
+  }
   function productVariantOptions(product) {
     if (product?.types?.length) return product.types;
     return [...new Set((product?.variantPrices || []).map(option => String(option.label || "").trim()).filter(Boolean))];
@@ -297,7 +316,7 @@
     if (!endpoint) { catalogState = "error"; finishCatalogLoad(); return; }
     window.receiveTrikonicProducts = catalog => {
       if (!catalog || !Array.isArray(catalog.products)) { catalogState = "error"; finishCatalogLoad(); return; }
-      products = catalog.ready ? catalog.products : [];
+      products = catalog.ready ? catalog.products.map(registerPhotoColors) : [];
       catalogState = products.length ? "ready" : "empty";
       clearTimeout(catalogLoadTimeout);
       finishCatalogLoad();
