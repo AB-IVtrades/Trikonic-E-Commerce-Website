@@ -222,6 +222,13 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function catalogProductCount(catalog) {
+    return catalog.reduce((total, product) => {
+      const types = new Set((product.types || []).map(normalizeVariantOption).filter(Boolean));
+      return total + Math.max(1, types.size);
+    }, 0);
+  }
+
   function renderProducts() {
     if (!grid) return;
     if (homeMore) homeMore.hidden = true;
@@ -238,7 +245,7 @@
     else if (productSort === "name") shown = shown.sort((a, b) => a.name.localeCompare(b.name));
     const resultCount = $("#product-result-count");
     const filteredCollection = Object.hasOwn(collectionLabel, collection);
-    if (resultCount) resultCount.textContent = `Showing ${shown.length} of ${products.length} products${filteredCollection ? ` · ${collectionLabel[collection]}` : ""}`;
+    if (resultCount) resultCount.textContent = `Showing ${catalogProductCount(shown)} of ${catalogProductCount(products)} products${filteredCollection ? ` · ${collectionLabel[collection]}` : ""}`;
     const clearCollection = $("#clear-shop-collection");
     if (clearCollection) clearCollection.hidden = !filteredCollection;
     if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products match these filters right now."}</p>`; return; }
@@ -268,7 +275,7 @@
     const categories = [...new Set(products.map(product => product.category).filter(Boolean))];
     if (categoryRow) {
       const cats = ["All finds", ...categories];
-      categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${products.length}</span>` : ""}</button>`).join("");
+      categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${catalogProductCount(products)}</span>` : ""}</button>`).join("");
     }
     if (homeCategoryGrid) {
       homeCategoryGrid.innerHTML = categories.slice(0, 8).map(name => {
