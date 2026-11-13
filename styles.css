@@ -672,7 +672,7 @@ select:hover{border-color:var(--ink)}
   min-height: 0;
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   background: white;
 }
 #account-open .account-initial, #account-open .account-icon { grid-area: 1 / 1; }
@@ -696,7 +696,7 @@ body.profile-photo-open { position: fixed; top: var(--photo-page-top); left: 0; 
 .photo-dialog-close { float: right; }
 .profile-photo-dialog h2 { margin: 4px 32px 18px 0; font-size: 21px; }
 .profile-photo-preview { display: block; width: 100%; max-height: 65dvh; object-fit: contain; }
-#profile-photo-canvas { display: block; width: min(100%, 280px, 40dvh); height: auto; margin: auto; border-radius: 50%; border: 1px solid var(--line); }
+#profile-photo-canvas { display: block; width: min(100%, 280px, 40dvh); height: auto; margin: auto; border-radius: 50%; border: 1px solid var(--line); touch-action: none; cursor: grab; }
 #profile-photo-editor p { font-size: 12px; line-height: 1.5; color: var(--muted); }
 #profile-photo-editor label { display: grid; gap: 6px; margin: 14px 0; font-size: 12px; }
 #profile-photo-editor input { width: 100%; margin: 0; accent-color: var(--ink); }

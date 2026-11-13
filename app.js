@@ -806,8 +806,9 @@
   }
 
   async function loadProfileAvatar(userId, version) {
+    const previousUrl = avatarUrl;
     const { data, error } = await supabaseClient.storage.from("profile-photos").download(`${userId}/avatar`);
-    if (error || signedInUser?.id !== userId || avatarVersion !== version) return;
+    if (error || signedInUser?.id !== userId || avatarVersion !== version || avatarUrl !== previousUrl) return;
     if (avatarUrl) URL.revokeObjectURL(avatarUrl);
     avatarUrl = URL.createObjectURL(data);
     paintProfileAvatars();
@@ -909,21 +910,21 @@
     let photoOwnerId = null;
 
     function openPhotoDialog(editing) {
-      photoScrollY = window.scrollY;
+      if (!photoDialog.open) photoScrollY = window.scrollY;
       photoOwnerId = signedInUser?.id;
       photoStatus.textContent = "";
       $("#profile-photo-editor").hidden = !editing;
       $("#profile-photo-preview").hidden = editing;
+      $("#profile-photo-edit").hidden = editing;
       $("#photo-dialog-title").textContent = editing ? "Adjust your profile photo" : "Profile photo";
       document.body.style.setProperty("--photo-page-top", `-${photoScrollY}px`);
       document.body.classList.add("profile-photo-open");
-      photoDialog.showModal();
+      if (!photoDialog.open) photoDialog.showModal();
     }
 
     function drawProfileCrop() {
       if (!cropImage) return;
-      // Start with the whole image fitting inside the circular avatar.
-      const scale = 512 / Math.hypot(cropImage.naturalWidth, cropImage.naturalHeight) * Number(photoControls[0].value);
+      const scale = 512 / Math.min(cropImage.naturalWidth, cropImage.naturalHeight) * Number(photoControls[0].value);
       const width = cropImage.naturalWidth * scale;
       const height = cropImage.naturalHeight * scale;
       const context = photoCanvas.getContext("2d");
@@ -939,17 +940,58 @@
       openPhotoDialog(false);
     });
     photoControls.forEach(control => control.addEventListener("input", drawProfileCrop));
+    let photoDrag = null;
+    photoCanvas.addEventListener("pointerdown", event => {
+      if (!cropImage || photoSave.disabled) return;
+      photoDrag = { x: event.clientX, y: event.clientY };
+      photoCanvas.setPointerCapture(event.pointerId);
+    });
+    photoCanvas.addEventListener("pointermove", event => {
+      if (!photoDrag || !cropImage) return;
+      const scale = 512 / Math.min(cropImage.naturalWidth, cropImage.naturalHeight) * Number(photoControls[0].value);
+      const previewScale = 512 / photoCanvas.getBoundingClientRect().width;
+      const offsets = [(event.clientX - photoDrag.x) * previewScale, (event.clientY - photoDrag.y) * previewScale];
+      const dimensions = [cropImage.naturalWidth * scale, cropImage.naturalHeight * scale];
+      dimensions.forEach((dimension, index) => {
+        if (dimension <= 512) return;
+        const control = photoControls[index + 1];
+        control.value = String(Math.max(0, Math.min(100, Number(control.value) + offsets[index] / (512 - dimension) * 100)));
+      });
+      photoDrag = { x: event.clientX, y: event.clientY };
+      drawProfileCrop();
+    });
+    photoCanvas.addEventListener("lostpointercapture", () => { photoDrag = null; });
+    $("#profile-photo-edit").addEventListener("click", event => {
+      runProfileAction(event.currentTarget, photoStatus, async () => {
+        const userId = signedInUser.id;
+        const image = new Image();
+        image.src = avatarUrl;
+        await image.decode();
+        if (signedInUser?.id !== userId || !photoDialog.open) return "";
+        prepareProfileCrop(image);
+        return "";
+      });
+    });
     photoClose.addEventListener("click", () => photoDialog.close());
     photoDialog.addEventListener("cancel", event => {
       if (photoSave.disabled) event.preventDefault();
     });
     photoDialog.addEventListener("close", () => {
       cropImage = null;
+      photoDrag = null;
       $("#profile-photo-preview").removeAttribute("src");
       document.body.classList.remove("profile-photo-open");
       document.body.style.removeProperty("--photo-page-top");
       window.scrollTo({ top: photoScrollY, behavior: "instant" });
     });
+
+    function prepareProfileCrop(image) {
+      cropImage = image;
+      photoControls[0].value = "1";
+      photoControls[1].value = photoControls[2].value = "50";
+      drawProfileCrop();
+      openPhotoDialog(true);
+    }
 
     photoInput.addEventListener("change", async event => {
       const input = event.currentTarget;
@@ -968,11 +1010,7 @@
         image.src = sourceUrl;
         await image.decode();
         if (signedInUser?.id !== userId) return;
-        cropImage = image;
-        photoControls[0].value = "1";
-        photoControls[1].value = photoControls[2].value = "50";
-        drawProfileCrop();
-        openPhotoDialog(true);
+        prepareProfileCrop(image);
       } catch (error) {
         status.textContent = error.message || "This image could not be opened. Choose another photo.";
         status.classList.add("account-error");
@@ -994,9 +1032,15 @@
         const { error: uploadError } = await bucket.upload(`${userId}/avatar`, file, { upsert: true, cacheControl: "0" });
         if (uploadError) throw uploadError;
         if (signedInUser?.id !== userId) return "";
-        const { error } = await supabaseClient.auth.updateUser({ data: { profile_photo_version: String(Date.now()) } });
+        const version = String(Date.now());
+        const { data, error } = await supabaseClient.auth.updateUser({ data: { profile_photo_version: version } });
         if (error) throw error;
-        await loadProfileAvatar(userId, avatarVersion);
+        if (signedInUser?.id !== userId) return "";
+        signedInUser = data.user;
+        avatarVersion = version;
+        if (avatarUrl) URL.revokeObjectURL(avatarUrl);
+        avatarUrl = URL.createObjectURL(file);
+        paintProfileAvatars();
         $("#profile-photo-status").textContent = "Profile photo updated.";
         photoDialog.close();
         return "";
