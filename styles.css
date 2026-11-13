@@ -653,3 +653,52 @@ select:hover{border-color:var(--ink)}
   .cart-page-item-actions { grid-column: 3; justify-content: space-between; }
   .customer-page-heading { margin-bottom: 22px; }
 }
+
+/* Keep uploaded avatars inside their controls, including the mobile header. */
+.account-initial, .profile-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+.account-initial img, .profile-avatar img {
+  display: block;
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: white;
+}
+#account-open .account-initial, #account-open .account-icon { grid-area: 1 / 1; }
+.profile-avatar { cursor: pointer; }
+.profile-avatar:disabled { cursor: default; }
+.profile-avatar:focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; }
+body.profile-photo-open { position: fixed; top: var(--photo-page-top); left: 0; right: 0; overflow: hidden; }
+.profile-photo-dialog {
+  width: min(440px, calc(100% - 28px));
+  max-height: calc(100dvh - 28px);
+  padding: 22px;
+  border: 0;
+  border-radius: 16px;
+  color: var(--ink);
+  background: white;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.profile-photo-dialog::backdrop { background: #061b31bb; }
+.profile-photo-dialog [hidden] { display: none; }
+.photo-dialog-close { float: right; }
+.profile-photo-dialog h2 { margin: 4px 32px 18px 0; font-size: 21px; }
+.profile-photo-preview { display: block; width: 100%; max-height: 65dvh; object-fit: contain; }
+#profile-photo-canvas { display: block; width: min(100%, 280px, 40dvh); height: auto; margin: auto; border-radius: 50%; border: 1px solid var(--line); }
+#profile-photo-editor p { font-size: 12px; line-height: 1.5; color: var(--muted); }
+#profile-photo-editor label { display: grid; gap: 6px; margin: 14px 0; font-size: 12px; }
+#profile-photo-editor input { width: 100%; margin: 0; accent-color: var(--ink); }
+#profile-photo-save { width: 100%; justify-content: center; border-radius: 8px; }
+#profile-photo-save:disabled { opacity: .6; cursor: wait; }

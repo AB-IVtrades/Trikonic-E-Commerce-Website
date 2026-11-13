@@ -786,6 +786,7 @@
     const initial = Array.from(name)[0]?.toUpperCase() || "";
     for (const element of [$("#account-initial"), $("#profile-avatar")].filter(Boolean)) {
       element.textContent = initial;
+      if (element.id === "profile-avatar") element.disabled = !avatarUrl;
       if (avatarUrl) {
         const img = document.createElement("img");
         img.src = avatarUrl;
@@ -807,6 +808,7 @@
 
   function renderProfile() {
     const userId = signedInUser?.id || null;
+    if (profileUserId !== userId) $("#profile-photo-dialog")?.close();
     const version = userId ? String(signedInUser.user_metadata?.profile_photo_version || "") : "";
     if (profileUserId !== userId || avatarVersion !== version) {
       if (avatarUrl) URL.revokeObjectURL(avatarUrl);
@@ -888,21 +890,110 @@
         return "Check your email for the password reset link.";
       });
     });
-    $("#profile-photo").addEventListener("change", event => {
+    const photoDialog = $("#profile-photo-dialog");
+    const photoCanvas = $("#profile-photo-canvas");
+    const photoSave = $("#profile-photo-save");
+    const photoClose = $("#photo-dialog-close");
+    const photoInput = $("#profile-photo");
+    const photoStatus = $("#photo-dialog-status");
+    const photoControls = [$("#photo-zoom"), $("#photo-horizontal"), $("#photo-vertical")];
+    let cropImage = null;
+    let photoScrollY = 0;
+    let photoOwnerId = null;
+
+    function openPhotoDialog(editing) {
+      photoScrollY = window.scrollY;
+      photoOwnerId = signedInUser?.id;
+      photoStatus.textContent = "";
+      $("#profile-photo-editor").hidden = !editing;
+      $("#profile-photo-preview").hidden = editing;
+      $("#photo-dialog-title").textContent = editing ? "Adjust your profile photo" : "Profile photo";
+      document.body.style.setProperty("--photo-page-top", `-${photoScrollY}px`);
+      document.body.classList.add("profile-photo-open");
+      photoDialog.showModal();
+    }
+
+    function drawProfileCrop() {
+      if (!cropImage) return;
+      // Start with the whole image fitting inside the circular avatar.
+      const scale = 512 / Math.hypot(cropImage.naturalWidth, cropImage.naturalHeight) * Number(photoControls[0].value);
+      const width = cropImage.naturalWidth * scale;
+      const height = cropImage.naturalHeight * scale;
+      const context = photoCanvas.getContext("2d");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, 512, 512);
+      context.drawImage(cropImage, (512 - width) * Number(photoControls[1].value) / 100,
+        (512 - height) * Number(photoControls[2].value) / 100, width, height);
+    }
+
+    $("#profile-avatar").addEventListener("click", () => {
+      if (!avatarUrl) return;
+      $("#profile-photo-preview").src = avatarUrl;
+      openPhotoDialog(false);
+    });
+    photoControls.forEach(control => control.addEventListener("input", drawProfileCrop));
+    photoClose.addEventListener("click", () => photoDialog.close());
+    photoDialog.addEventListener("cancel", event => {
+      if (photoSave.disabled) event.preventDefault();
+    });
+    photoDialog.addEventListener("close", () => {
+      cropImage = null;
+      $("#profile-photo-preview").removeAttribute("src");
+      document.body.classList.remove("profile-photo-open");
+      document.body.style.removeProperty("--photo-page-top");
+      window.scrollTo({ top: photoScrollY, behavior: "instant" });
+    });
+
+    photoInput.addEventListener("change", async event => {
       const input = event.currentTarget;
       const file = input.files[0];
-      if (!file) return;
-      runProfileAction(input, $("#profile-photo-status"), async () => {
+      if (!file || !signedInUser) return;
+      const status = $("#profile-photo-status");
+      status.textContent = "";
+      status.classList.remove("account-error");
+      const userId = signedInUser.id;
+      let sourceUrl = "";
+      input.disabled = true;
+      try {
         if (!["image/jpeg", "image/png"].includes(file.type) || file.size > 2 * 1024 * 1024) throw new Error("Choose a JPG or PNG up to 2 MB.");
-        const userId = signedInUser.id;
+        sourceUrl = URL.createObjectURL(file);
+        const image = new Image();
+        image.src = sourceUrl;
+        await image.decode();
+        if (signedInUser?.id !== userId) return;
+        cropImage = image;
+        photoControls[0].value = "1";
+        photoControls[1].value = photoControls[2].value = "50";
+        drawProfileCrop();
+        openPhotoDialog(true);
+      } catch (error) {
+        status.textContent = error.message || "This image could not be opened. Choose another photo.";
+        status.classList.add("account-error");
+      } finally {
+        if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+        input.disabled = false;
+        input.value = "";
+      }
+    });
+    photoSave.addEventListener("click", () => {
+      if (!cropImage || signedInUser?.id !== photoOwnerId) return;
+      const userId = photoOwnerId;
+      photoClose.disabled = photoInput.disabled = true;
+      runProfileAction(photoSave, photoStatus, async () => {
+        const file = await new Promise(resolve => photoCanvas.toBlob(resolve, "image/png"));
+        if (!file) throw new Error("Could not prepare the photo. Please try again.");
+        if (signedInUser?.id !== userId) throw new Error("Please sign in again to save your photo.");
         const bucket = supabaseClient.storage.from("profile-photos");
         const { error: uploadError } = await bucket.upload(`${userId}/avatar`, file, { upsert: true, cacheControl: "0" });
         if (uploadError) throw uploadError;
         if (signedInUser?.id !== userId) return "";
         const { error } = await supabaseClient.auth.updateUser({ data: { profile_photo_version: String(Date.now()) } });
         if (error) throw error;
-        return "Profile photo updated.";
-      }).finally(() => { input.value = ""; });
+        await loadProfileAvatar(userId, avatarVersion);
+        $("#profile-photo-status").textContent = "Profile photo updated.";
+        photoDialog.close();
+        return "";
+      }).finally(() => { photoClose.disabled = photoInput.disabled = false; });
     });
   }
 
