@@ -291,10 +291,12 @@ body.mobile-nav-open{overflow:hidden}
 
 /* Product details: let the image define its own height so there are no blank
    bands above or below it, and keep the mobile dialog within the viewport. */
+body.product-detail-open{position:fixed;top:var(--detail-page-top);left:0;right:0;overflow:hidden}
+.product-detail-modal{overscroll-behavior:contain}
 .detail-main-image{height:auto;min-height:0;background:#fff;display:flex;align-items:center;justify-content:center}
 .detail-main-image img{display:block;width:100%;height:auto;max-height:min(67vh,640px);object-fit:contain}
 @media(max-width:650px){
-  .product-detail-backdrop{padding:0;overflow:hidden}
+  .product-detail-backdrop{padding:0;overflow:hidden;background:var(--white);overscroll-behavior:none}
   .product-detail-modal{box-sizing:border-box;width:100%;max-width:100vw;height:100dvh;max-height:100dvh;padding:18px 14px calc(16px + env(safe-area-inset-bottom));overflow-x:hidden;overflow-y:auto}
   .detail-close{margin:-8px -4px 0 0}
   .product-detail-layout{box-sizing:border-box;width:100%;max-width:100%;min-width:0;grid-template-columns:minmax(0,1fr);gap:14px}

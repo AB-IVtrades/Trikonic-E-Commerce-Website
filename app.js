@@ -393,6 +393,7 @@
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
   const detailBackdrop = $("#product-detail-backdrop");
+  let detailPageScrollY = 0;
   let detailProduct = null, detailColor = "", detailSize = "", detailVariant = "";
   let detailColorPhotos = new Map(), detailTypePhotos = new Map();
   const swatchColors = {
@@ -509,6 +510,7 @@
     $("#detail-purchase-status").textContent = missingChoice && !unavailable ? "Choose the available options to continue." : $("#detail-availability").textContent;
   }
   function openProductDetail(product) {
+    if (!detailProduct) detailPageScrollY = window.scrollY;
     detailProduct = product;
     detailColor = "";
     detailSize = "";
@@ -534,12 +536,19 @@
     renderDetailOptions();
     detailBackdrop.classList.add("show");
     detailBackdrop.setAttribute("aria-hidden", "false");
+    document.body.style.setProperty("--detail-page-top", `-${detailPageScrollY}px`);
+    document.body.classList.add("product-detail-open");
     document.body.classList.add("no-scroll");
+    detailBackdrop.querySelector(".product-detail-modal").scrollTop = 0;
   }
   function closeProductDetail() {
+    if (!detailProduct) return;
     detailBackdrop.classList.remove("show");
     detailBackdrop.setAttribute("aria-hidden", "true");
     document.body.classList.remove("no-scroll");
+    document.body.classList.remove("product-detail-open");
+    document.body.style.removeProperty("--detail-page-top");
+    window.scrollTo({ top: detailPageScrollY, behavior: "instant" });
     detailProduct = null;
   }
   $("#detail-close").addEventListener("click", closeProductDetail);
