@@ -46,25 +46,6 @@
     return Number.isSafeInteger(quantity) && quantity > 0 ? `${quantity} in stock` : "In stock";
   }
   function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
-  function registerPhotoColors(product) {
-    const colors = new Map();
-    for (const color of product.colors || []) {
-      const label = String(color).trim();
-      if (label) colors.set(normalizeVariantOption(label), label);
-    }
-    // Explicit "Colour | URL" photo labels also define selectable colours.
-    // Bare gallery photos do not imply that a colour is available.
-    for (const entry of [product.image, ...(product.images || [])]) {
-      const photo = String(entry || "");
-      const separator = photo.indexOf("|");
-      if (separator < 1) continue;
-      const label = photo.slice(0, separator).trim();
-      const source = photo.slice(separator + 1).trim();
-      const key = normalizeVariantOption(label);
-      if (label && source && !/[|/:]/.test(label) && !colors.has(key)) colors.set(key, label);
-    }
-    return { ...product, colors: [...colors.values()] };
-  }
   function productVariantOptions(product) {
     if (product?.types?.length) return product.types;
     return [...new Set((product?.variantPrices || []).map(option => String(option.label || "").trim()).filter(Boolean))];
@@ -316,7 +297,7 @@
     if (!endpoint) { catalogState = "error"; finishCatalogLoad(); return; }
     window.receiveTrikonicProducts = catalog => {
       if (!catalog || !Array.isArray(catalog.products)) { catalogState = "error"; finishCatalogLoad(); return; }
-      products = catalog.ready ? catalog.products.map(registerPhotoColors) : [];
+      products = catalog.ready ? catalog.products : [];
       catalogState = products.length ? "ready" : "empty";
       clearTimeout(catalogLoadTimeout);
       finishCatalogLoad();
@@ -382,7 +363,9 @@
       const itemKey = escapeAttr(key);
       const unavailable = cartItemIsUnavailable(product, selection);
       const options = [selection.color, selection.size, selection.variant].filter(Boolean).map(escapeHtml).join(" · ");
-      const image = product && resolveProductImage(productGallery(product).colorPhotos.get(selection.color) || product.image);
+      const gallery = product && productGallery(product);
+      const image = gallery && (gallery.colorPhotos.get(selection.color) ||
+        gallery.typePhotos.get(normalizeVariantOption(selection.variant)) || resolveProductImage(product.image));
       return `<article class="cart-page-item">
         <input type="checkbox" data-cart-select="${itemKey}" aria-label="Select ${name}${options ? `, ${options}` : ""} for checkout" ${excludedCartItems.has(key) ? "" : "checked"}>
         ${image ? `<img src="${escapeAttr(image)}" alt="" width="72" height="72">` : ""}
@@ -411,7 +394,7 @@
   function escapeAttr(s) { return escapeHtml(s); }
   const detailBackdrop = $("#product-detail-backdrop");
   let detailProduct = null, detailColor = "", detailSize = "", detailVariant = "";
-  let detailColorPhotos = new Map();
+  let detailColorPhotos = new Map(), detailTypePhotos = new Map();
   const swatchColors = {
     black:"#242424", jet:"#171717", charcoal:"#414141", graphite:"#454545",
     white:"#fffefa", ivory:"#f5f0e5", "off white":"#f5f0e5", "off-white":"#f5f0e5",
@@ -436,6 +419,8 @@
   function productGallery(product) {
     const photos = new Set();
     const colorPhotos = new Map();
+    const typePhotos = new Map();
+    const typeKeys = new Set(product.colors?.length ? [] : (product.types || []).map(normalizeVariantOption));
     const unlabeledPhotos = [];
     const colors = (product.colors || []).map(label => ({ label, name: normalizeSwatchName(label) }))
       .filter(color => color.name).sort((a, b) => b.name.length - a.name.length);
@@ -448,8 +433,10 @@
       if (!image) continue;
       photos.add(image);
       if (label) {
-        const color = colors.find(option => normalizeVariantOption(option.label) === normalizeVariantOption(label));
+        const key = normalizeVariantOption(label);
+        const color = colors.find(option => normalizeVariantOption(option.label) === key);
         if (color) colorPhotos.set(color.label, image);
+        if (typeKeys.has(key)) typePhotos.set(key, image);
       } else {
         unlabeledPhotos.push(image);
       }
@@ -476,7 +463,7 @@
     for (const [color, image] of aliasMatches) {
       if (!colorPhotos.has(color)) colorPhotos.set(color, image);
     }
-    return { images: [...photos], colorPhotos };
+    return { images: [...photos], colorPhotos, typePhotos };
   }
   function showDetailPhoto(image) {
     $("#detail-main-image").src = image;
@@ -526,8 +513,9 @@
     detailColor = "";
     detailSize = "";
     detailVariant = "";
-    const { images, colorPhotos } = productGallery(product);
+    const { images, colorPhotos, typePhotos } = productGallery(product);
     detailColorPhotos = colorPhotos;
+    detailTypePhotos = typePhotos;
     $("#detail-main-image").alt = product.name;
     $("#detail-thumbnails").innerHTML = images.map((image, index) => `<button type="button" class="detail-thumbnail" data-detail-image="${escapeAttr(image)}" aria-label="View product image ${index + 1}"><img src="${escapeAttr(image)}" alt=""></button>`).join("");
     showDetailPhoto(images[0] || "");
@@ -574,6 +562,9 @@
     const button = event.target.closest("[data-detail-variant]");
     if (!button) return;
     detailVariant = button.dataset.detailVariant;
+    if (!detailProduct.colors?.length && detailProduct.types?.length) {
+      showDetailPhoto(detailTypePhotos.get(normalizeVariantOption(detailVariant)) || resolveProductImage(detailProduct.image));
+    }
     renderDetailOptions();
     $("#detail-variants [aria-pressed='true']")?.focus({ preventScroll: true });
   });
