@@ -702,3 +702,13 @@ body.profile-photo-open { position: fixed; top: var(--photo-page-top); left: 0; 
 #profile-photo-editor input { width: 100%; margin: 0; accent-color: var(--ink); }
 #profile-photo-save { width: 100%; justify-content: center; border-radius: 8px; }
 #profile-photo-save:disabled { opacity: .6; cursor: wait; }
+
+@media (min-width: 781px) {
+  .shop-sidebar, .category-page-sidebar {
+    min-height: 0;
+    max-height: calc(100dvh - 36px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+  }
+}
