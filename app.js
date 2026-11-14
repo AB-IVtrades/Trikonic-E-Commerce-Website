@@ -278,7 +278,8 @@
       if (homeCategoryGrid) homeCategoryGrid.innerHTML = "";
       return;
     }
-    const categories = [...new Set(products.map(product => product.category).filter(Boolean))];
+    const categories = [...new Set(products.map(product => product.category).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true }));
     if (categoryRow) {
       const cats = ["All finds", ...categories];
       categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${catalogProductCount(products)}</span>` : ""}</button>`).join("");
@@ -654,7 +655,13 @@
   document.addEventListener("click", e => {
     const detail = e.target.closest("[data-detail]"); if (detail) { const product = products.find(p => p.id === detail.dataset.detail); if (product) openProductDetail(product); return; }
     const add = e.target.closest("[data-add]"); if (add) { const product = products.find(p => p.id === add.dataset.add); if (!product || product.availability === "out_of_stock") return; if (product.colors?.length || product.sizes?.length || productVariantOptions(product).length) openVariantPicker(product); else addProductToCart(product); }
-    const filter = e.target.closest("[data-category]"); if (filter) { category = filter.dataset.category; renderCategories(); renderProducts(); }
+    const filter = e.target.closest("[data-category]");
+    if (filter) {
+      category = filter.dataset.category;
+      renderCategories();
+      renderProducts();
+      $("#shop")?.scrollIntoView({ behavior: "instant", block: "start" });
+    }
     const qty = e.target.closest("[data-qty]"); if (qty) { const product = productForCartKey(qty.dataset.qty); if (Number(qty.dataset.delta) > 0 && product?.availability === "out_of_stock") return; cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
   });
