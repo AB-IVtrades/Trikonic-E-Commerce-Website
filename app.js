@@ -1,6 +1,7 @@
 (() => {
   // The Google Sheet is the catalog source of truth. Never render bundled sample data first.
   let products = [];
+  const catalogImageVersion = String(Date.now());
   let catalogState = "loading";
   const money = n => `GH₵${Number(n).toFixed(2)}`;
   const CART_KEY = "trikonic-cart-v1";
@@ -122,6 +123,11 @@
   function resolveProductImage(source) {
     const image = String(source || "").trim();
     if (!image) return "";
+    if (/^https:\/\/raw\.githubusercontent\.com\/AB-IVtrades\/Trikonic-E-Commerce-Website\/main\/images\//i.test(image)) {
+      const url = new URL(image);
+      url.searchParams.set("v", catalogImageVersion);
+      return url.toString();
+    }
     if (/^(https?:\/\/|data:|blob:|\/)/i.test(image)) return image;
     const path = image.replace(/^\.\//, "");
     return path.includes("/") ? path : `images/${path}`;
