@@ -70,6 +70,9 @@ The catalog converts each USD unit price and USD shipping fee to GHS and rounds 
 
 For photos stored with the website, upload optimized JPG/WebP files to an `images` folder in the repository, then enter that relative path in the sheet (for example `images/set-of-basic-tops.jpeg`). A bare filename is also treated as an image inside `images/`. Keep images reasonably small (around 300 KB where practical). The hero and story photos are separate; change those `<img src="...">` values in `index.html` when you have brand photos. The storefront waits for the live sheet catalog instead of briefly showing sample products.
 
+Photos added or replaced in `images/` on `main` are checked by the **Compress product photos** GitHub Actions workflow. Photos over 500 KB are compressed in place, with a maximum dimension of 1280 pixels. Filenames, file formats, and photo URLs are preserved. The workflow commits smaller results and updates the stable image cache version automatically. Already-compressed photos are skipped. To run the same process locally, install `Pillow==12.1.1` and run `python scripts/compress-images.py`.
+
+
 The example products and contact details are placeholders. Replace them before launch. Search the project for `hello@trikonic.com` to update the contact address.
 
 ## Send order requests to Google Sheets
