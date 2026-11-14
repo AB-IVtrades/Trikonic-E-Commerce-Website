@@ -32,7 +32,7 @@ The bag is saved in the browser's local storage, so it survives closing and reop
 
 ## Store maintenance mode
 
-Sign in to the site using the admin account (`nkab200321@gmail.com`) and open **My account**. The account panel has a **Storefront control** button to turn maintenance mode on or off. Shoppers see a temporary maintenance page while the catalog and ordering controls are unavailable; the signed-in admin can still access the store and the control. Supabase RLS checks the authenticated email claim when accepting a change, so changing browser code or signing in as an ordinary customer cannot enable or disable the setting. The single boolean is readable by the storefront so it can display the right page.
+Sign in to the site using the admin account (`nkab200321@gmail.com`) and open **My account**. The account panel has a **Storefront control** button to turn maintenance mode on or off. Shoppers see a temporary maintenance page while the catalog and ordering controls are unavailable; the signed-in admin can still access the store and the control. Supabase RLS checks the authenticated email claim when accepting a change, so changing browser code or signing in as an ordinary customer cannot enable or disable the setting. The single boolean is readable by the storefront so it can display the right page. Maintenance follows this saved manual setting at all hours.
 
 ## Manage products in Google Sheets
 

@@ -715,24 +715,13 @@
   const accountBackdrop = $("#account-backdrop");
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
   function isStoreAdmin() { return Boolean(signedInUser?.email && adminEmail && signedInUser.email.trim().toLowerCase() === adminEmail); }
-  function outsideStoreHours(now = new Date()) {
-    // Ghana uses GMT year-round.
-    const day = now.getUTCDay();
-    const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-    if (day === 0) return true;
-    if (day === 6) return minutes < 9 * 60 || minutes >= 15 * 60;
-    return minutes < 8 * 60 + 30 || minutes >= 18 * 60;
-  }
-  function storefrontIsClosed() { return manualMaintenance || outsideStoreHours(); }
+  function storefrontIsClosed() { return manualMaintenance; }
   const maintenanceControl = $("#admin-maintenance-control");
   const maintenanceStatus = $("#maintenance-status");
   const maintenanceToggle = $("#maintenance-toggle");
-  let lastScheduledClosure;
   function renderMaintenanceMode() {
     const isAdmin = isStoreAdmin();
-    const scheduledClosure = outsideStoreHours();
-    lastScheduledClosure = scheduledClosure;
-    const showScreen = (manualMaintenance || scheduledClosure) && !isAdmin && !profilePage;
+    const showScreen = manualMaintenance && !isAdmin && !profilePage;
     const screen = $("#maintenance-screen");
     if (showScreen && screen.hidden) {
       setMobileNav(false);
@@ -741,15 +730,12 @@
       if (!savedReceiptOrder) closeModal();
     }
     screen.hidden = !showScreen;
-    screen.querySelector("p").textContent = scheduledClosure && !manualMaintenance
-      ? "Shop Monday to Friday, 8:30 AM–6:00 PM, and Saturday, 9:00 AM–3:00 PM GMT. We’re closed on Sundays."
-      : "We’re updating the collection right now. Please check back soon.";
+    screen.querySelector("p").textContent = "We’re updating the collection right now. Please check back soon.";
     document.body.classList.toggle("maintenance-active", showScreen);
     if (!maintenanceControl) return;
     maintenanceControl.hidden = !isAdmin;
     maintenanceStatus.textContent = !maintenanceLoaded ? "Checking storefront status…"
       : manualMaintenance ? "Manual maintenance is on."
-      : scheduledClosure ? "The store is closed outside scheduled hours."
       : "The storefront is open.";
     maintenanceToggle.textContent = manualMaintenance ? "Turn off manual maintenance" : "Turn on manual maintenance";
     maintenanceToggle.setAttribute("aria-pressed", String(manualMaintenance));
@@ -1341,12 +1327,6 @@
   }
   renderAccountState(); setAuthMode("signup");
   loadMaintenanceMode();
-  function refreshScheduledMaintenance() {
-    if (lastScheduledClosure !== outsideStoreHours()) renderMaintenanceMode();
-  }
-  setInterval(refreshScheduledMaintenance, 1000);
-  document.addEventListener("visibilitychange", refreshScheduledMaintenance);
-  window.addEventListener("pageshow", refreshScheduledMaintenance);
   document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); closeContactForm(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
 
