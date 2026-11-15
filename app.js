@@ -59,18 +59,30 @@
     const match = (color && size && find(color, size)) || (variant && prices.find(option => normalizeVariantOption(option.label) === variant)) || (color && find(color, "")) || (size && find("", size));
     return Number(match?.price) || Number(product?.price) || 0;
   }
-  function priceFor(product, selection = {}) {
+  function shippingFeeFor(product) {
+    const fee = product?.shippingFee == null ? NaN : Number(product.shippingFee);
+    return Number.isFinite(fee) && fee >= 0 ? Math.round(fee * 100) / 100 : null;
+  }
+  function priceFor(product, selection = {}, includeShipping = false) {
     const regular = regularPriceFor(product, selection);
     const sale = Number(product?.salePrice);
-    return { regular, current: product?.flashSale && sale > 0 && sale < regular ? sale : regular, onSale: Boolean(product?.flashSale && sale > 0 && sale < regular) };
+    const onSale = Boolean(product?.flashSale && sale > 0 && sale < regular);
+    const current = onSale ? sale : regular;
+    if (!includeShipping) return { regular, current, onSale };
+    const shippingCents = Math.round((shippingFeeFor(product) || 0) * 100);
+    return {
+      regular: (Math.round(regular * 100) + shippingCents) / 100,
+      current: (Math.round(current * 100) + shippingCents) / 100,
+      onSale
+    };
   }
-  function priceMarkup(product, selection = {}, prefix = "") {
-    const { regular, current, onSale } = priceFor(product, selection);
+  function priceMarkup(product, selection = {}, prefix = "", includeShipping = false) {
+    const { regular, current, onSale } = priceFor(product, selection, includeShipping);
     return onSale ? `<span class="sale-prices"><s>${money(regular)}</s><strong>${money(current)}</strong></span>` : `${prefix}<strong>${money(current)}</strong>`;
   }
   function productStartingPrice(product) {
     const options = (product?.variantPrices || []).map(option => ({ color: option.color, size: option.size, variant: option.label }));
-    const prices = [priceFor(product, {}).current, ...options.map(option => priceFor(product, option).current)].filter(price => price > 0);
+    const prices = [priceFor(product, {}, true).current, ...options.map(option => priceFor(product, option, true).current)].filter(price => price > 0);
     return Math.min(...prices);
   }
   function cartSelectionIsValid(product, selection) {
@@ -102,13 +114,12 @@
       const { color, size, variant } = selection;
       const { current, regular, onSale } = priceFor(product, { color, size, variant });
       const quantity = cart.get(key);
-      const shippingRate = product.shippingFee == null ? null : Number(product.shippingFee);
       return {
         id: product.id, name: product.name, color, size, variant, availability: product.availability,
         flashSale: onSale, quantity, unitPrice: current, originalUnitPrice: regular,
         lineTotal: Math.round(current * 100) * quantity / 100,
         // Charge shipping once for this cart line, regardless of quantity.
-        shippingTotal: Number.isFinite(shippingRate) && shippingRate >= 0 ? Math.round(shippingRate * 100) / 100 : null
+        shippingTotal: shippingFeeFor(product)
       };
     }).filter(Boolean);
   }
@@ -267,7 +278,8 @@
     const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : inStockLabel(p).toUpperCase();
     const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
     const startPrice = productStartingPrice(p);
-    const price = p.flashSale && startPrice < p.price ? `<span class="sale-prices"><s>${money(p.price)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
+    const regularPrice = priceFor(p, {}, true).regular;
+    const price = p.flashSale && startPrice < regularPrice ? `<span class="sale-prices"><s>${money(regularPrice)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
     return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}">→</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><div class="product-card-price">${price}</div><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div></div></article>`;
   }
   function renderCategories() {
@@ -519,7 +531,7 @@
     $("#detail-variants").innerHTML = variants.map(option => `<button type="button" class="detail-size ${option === detailVariant ? "selected" : ""}" data-detail-variant="${escapeAttr(option)}" aria-pressed="${option === detailVariant}">${escapeHtml(option)}</button>`).join("");
     const missingChoice = !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     const unavailable = detailProduct.availability === "out_of_stock";
-    $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
+    $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant }, "", true);
     $("#detail-add").disabled = unavailable || missingChoice;
     $("#detail-purchase-status").textContent = missingChoice && !unavailable ? "Choose the available options to continue." : $("#detail-availability").textContent;
   }
@@ -541,7 +553,7 @@
     const availability = product.availability === "preorder" ? "Available for pre-order" : product.availability === "out_of_stock" ? "Currently out of stock" : inStockLabel(product);
     $("#detail-availability").textContent = availability;
     $("#detail-availability").className = `detail-availability ${product.availability === "preorder" ? "preorder" : product.availability === "out_of_stock" ? "out-of-stock" : "in-stock"}`;
-    $("#detail-price").innerHTML = priceMarkup(product);
+    $("#detail-price").innerHTML = priceMarkup(product, {}, "", true);
     $("#detail-purchase-status").textContent = availability;
     $("#detail-add").disabled = product.availability === "out_of_stock";
     $("#detail-add").innerHTML = product.availability === "out_of_stock" ? "Out of stock" : 'Add to bag <span>↗</span>';
@@ -622,7 +634,7 @@
   function updateVariantPickerPrice() {
     if (!pendingVariantProduct) return;
     const selection = { color: $("#variant-color").value, size: $("#variant-size").value, variant: $("#variant-option").value };
-    const { regular, current, onSale } = priceFor(pendingVariantProduct, selection);
+    const { regular, current, onSale } = priceFor(pendingVariantProduct, selection, true);
     $("#variant-product-name").textContent = `${pendingVariantProduct.name} · ${money(current)}${onSale ? ` (was ${money(regular)})` : ""}`;
   }
   function closeVariantPicker() {

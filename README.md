@@ -77,7 +77,7 @@ The example products and contact details are placeholders. Replace them before l
 
 ## Send order requests to Google Sheets
 
-Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Shipping fees entered in **Website Catalog** are charged once per checkout item, regardless of quantity, and shown separately in GHS before payment. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
+Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Shipping fees entered in **Website Catalog** are included in shop and product-option prices. The cart and checkout separate the item subtotal and shipping in GHS. Shipping is charged once per checkout item, regardless of quantity. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
 
 To connect the order form and product catalog to the existing Sheet:
 
