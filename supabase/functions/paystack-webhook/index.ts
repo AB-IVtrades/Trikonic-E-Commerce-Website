@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { receiptColumns, receiptFilename, receiptHtml, savedReceiptPdf, toBase64 } from "../_shared/receipt.ts";
 
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const encoder = new TextEncoder();
@@ -18,9 +19,6 @@ function constantTimeEqual(a: string, b: string) {
   let mismatch = 0;
   for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return mismatch === 0;
-}
-function escapeHtml(value: unknown) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 }
 function ghanaPhone(value: string) {
   const digits = value.replace(/\D/g, "");
@@ -78,7 +76,7 @@ Deno.serve(async (req) => {
   const apiHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
   const lookup = new URL(`${supabaseUrl}/rest/v1/orders`);
   lookup.searchParams.set("payment_reference", `eq.${reference}`);
-  lookup.searchParams.set("select", "id,order_number,user_id,customer_email,contact,estimated_total,currency,status,payment_status,email_notified_at,sms_notified_at");
+  lookup.searchParams.set("select", `${receiptColumns},user_id,status,email_notified_at,sms_notified_at`);
   const foundResponse = await fetch(lookup, { headers: apiHeaders });
   if (!foundResponse.ok) return reply({ error: "Could not load payment order" }, 503);
   const orders = await foundResponse.json();
@@ -94,6 +92,7 @@ Deno.serve(async (req) => {
     console.error("Paystack verification mismatch", reference);
     return reply({ error: "Payment verification failed" }, 400);
   }
+  if (!["pending", "paid"].includes(order.payment_status)) return reply({ received: true });
   if (order.payment_status !== "paid") {
     const paidAt = verified.data.paid_at || new Date().toISOString();
     const patchUrl = new URL(`${supabaseUrl}/rest/v1/orders`);
@@ -101,10 +100,13 @@ Deno.serve(async (req) => {
     patchUrl.searchParams.set("payment_status", "eq.pending");
     const patchResponse = await fetch(patchUrl, {
       method: "PATCH",
-      headers: { ...apiHeaders, Prefer: "return=minimal" },
+      headers: { ...apiHeaders, Prefer: "return=representation" },
       body: JSON.stringify({ payment_status: "paid", payment_paid_at: paidAt, status: order.status === "Order Received" ? "Payment Made" : order.status }),
     });
     if (!patchResponse.ok) return reply({ error: "Could not record payment" }, 503);
+    const [saved] = await patchResponse.json();
+    if (!saved) return reply({ error: "Order payment changed; retry verification" }, 503);
+    Object.assign(order, saved);
   }
 
   // Keep the Sheet aligned with the verified payment. Apps Script treats this
@@ -122,12 +124,16 @@ Deno.serve(async (req) => {
   const from = Deno.env.get("TRIKONIC_FROM_EMAIL") || "Trikonic Imports <orders@trikonicimports.com>";
   if (!resendKey || !order.customer_email) return reply({ error: "Payment confirmed; email notification is not configured yet" }, 503);
   if (!order.email_notified_at) {
+    let receipt;
+    try { receipt = await savedReceiptPdf(order, supabaseUrl, serviceKey); }
+    catch (error) { console.error("Receipt generation failed", error); return reply({ error: "Payment saved; receipt will retry" }, 503); }
     const email = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json", "Idempotency-Key": `paid-order-${order.order_number}` },
       body: JSON.stringify({
         from, to: [order.customer_email], subject: `Payment received · ${order.order_number}`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123451"><p style="letter-spacing:.12em;color:#07805e">TRIKONIC IMPORTS</p><h1>Payment received</h1><p>We’ve confirmed your payment for order <strong>${escapeHtml(order.order_number)}</strong>.</p><p>Amount paid: <strong>GH₵${Number(order.estimated_total).toFixed(2)}</strong></p><p>You can track the order from <a href="https://trikonicimports.com/#home">your Trikonic account</a>. Shipping is included in the amount paid.</p></div>`,
+        html: receiptHtml(order),
+        attachments: [{ filename: receiptFilename(order), content: toBase64(receipt), content_type: "application/pdf" }],
       }),
     });
     if (!email.ok) { console.error("Resend notification failed", await email.text()); return reply({ error: "Payment saved; email notification will retry" }, 503); }

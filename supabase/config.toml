@@ -9,3 +9,6 @@ verify_jwt = true
 
 [functions.paystack-webhook]
 verify_jwt = false
+
+[functions.customer-receipt]
+verify_jwt = true

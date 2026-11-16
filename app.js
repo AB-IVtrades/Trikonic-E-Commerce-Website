@@ -12,6 +12,7 @@
   let signedInUser = null;
   let passwordRecoveryMode = false;
   let resumeCheckoutAfterAuth = false;
+  const trackedOrder = new URLSearchParams(location.search).get("track") || "";
   const paymentReturned = new URLSearchParams(location.search).get("payment") === "return";
   const adminEmail = String(window.TRikonicAdminEmail || "").trim().toLowerCase();
   let manualMaintenance = false;
@@ -106,6 +107,10 @@
   function selectedCartKeys() {
     return [...cart.keys()].filter(key => cart.get(key) > 0 && !excludedCartItems.has(key));
   }
+  function selectionPhoto(product, selection) {
+    const gallery = productGallery(product);
+    return gallery.colorPhotos.get(selection.color) || gallery.typePhotos.get(normalizeVariantOption(selection.variant)) || resolveProductImage(product.image);
+  }
   function cartOrderItems(keys) {
     return keys.map(key => {
       const product = productForCartKey(key);
@@ -115,7 +120,7 @@
       const { current, regular, onSale } = priceFor(product, { color, size, variant });
       const quantity = cart.get(key);
       return {
-        id: product.id, name: product.name, color, size, variant, availability: product.availability,
+        id: product.id, name: product.name, image: selectionPhoto(product, selection), color, size, variant, availability: product.availability,
         flashSale: onSale, quantity, unitPrice: current, originalUnitPrice: regular,
         lineTotal: Math.round(current * 100) * quantity / 100,
         // Charge shipping once for this cart line, regardless of quantity.
@@ -389,9 +394,7 @@
       const itemKey = escapeAttr(key);
       const unavailable = cartItemIsUnavailable(product, selection);
       const options = [selection.color, selection.size, selection.variant].filter(Boolean).map(escapeHtml).join(" · ");
-      const gallery = product && productGallery(product);
-      const image = gallery && (gallery.colorPhotos.get(selection.color) ||
-        gallery.typePhotos.get(normalizeVariantOption(selection.variant)) || resolveProductImage(product.image));
+      const image = product && selectionPhoto(product, selection);
       return `<article class="cart-page-item">
         <input type="checkbox" data-cart-select="${itemKey}" aria-label="Select ${name}${options ? `, ${options}` : ""} for checkout" ${excludedCartItems.has(key) ? "" : "checked"}>
         ${image ? `<img src="${escapeAttr(image)}" alt="" width="72" height="72">` : ""}
@@ -1117,6 +1120,11 @@
       if (data.length < pageSize) break;
     }
     accountOrders = orders;
+    const linkedOrder = trackedOrder && orders.find(order => order.order_number === trackedOrder);
+    if (linkedOrder) {
+      const linkedStatus = String(linkedOrder.status).trim().toLowerCase().replace(/[ _-]+/g, " ");
+      selectOrderView(["order delivered", "order cancelled", "delivered", "cancelled"].includes(linkedStatus) ? "history" : "tracking");
+    }
     status.textContent = paymentReturned ? "Paystack has returned you to Trikonic. Payment status updates after secure verification; refresh shortly if it still says pending." : "";
     renderOrders();
   }
@@ -1154,11 +1162,32 @@
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
       const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size || item.variant ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`, item.variant && `Option: ${item.variant}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
       const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && !isFinished(current);
-      const paymentLine = order.payment_status === "paid" ? '<p class="order-payment-state paid">Payment confirmed</p>' : unpaid ? `<p class="order-payment-state">Payment pending · Shipping included</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
-      return `<details class="order-card"><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">${tracking ? "View order tracking" : "View order details"} <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
+      const paymentLine = order.payment_status === "paid" ? `<p class="order-payment-state paid">Payment confirmed</p><button class="paid-receipt-button" type="button" data-receipt-order="${escapeAttr(order.order_number)}">Download payment receipt (PDF)</button>` : unpaid ? `<p class="order-payment-state">Payment pending · Shipping included</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
+      return `<details class="order-card"${trackedOrder === order.order_number ? " open" : ""}><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">${tracking ? "View order tracking" : "View order details"} <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
     }).join("");
   }
   $("#order-history").addEventListener("click", async event => {
+    const receiptButton = event.target.closest("[data-receipt-order]");
+    if (receiptButton) {
+      event.preventDefault(); event.stopPropagation();
+      receiptButton.disabled = true; receiptButton.textContent = "Preparing receipt…";
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) throw new Error("Please sign in again to download your receipt.");
+        const response = await fetch(`${supabaseConfig.url}/functions/v1/customer-receipt`, {
+          method: "POST",
+          headers: { apikey: supabaseConfig.publishableKey, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ orderNumber: receiptButton.dataset.receiptOrder })
+        });
+        if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || "Could not download your receipt. Please try again."); }
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a"); link.href = url; link.download = `Trikonic-${receiptButton.dataset.receiptOrder}-receipt.pdf`;
+        document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+        $("#orders-status").textContent = "Your payment receipt has been downloaded.";
+      } catch (error) { $("#orders-status").textContent = error.message || "Could not download your receipt."; }
+      finally { receiptButton.disabled = false; receiptButton.textContent = "Download payment receipt (PDF)"; }
+      return;
+    }
     const payButton = event.target.closest("[data-pay-order]");
     if (payButton) {
       event.preventDefault(); event.stopPropagation(); payButton.disabled = true; payButton.textContent = "Opening Paystack…";
@@ -1338,6 +1367,7 @@
     });
   }
   renderAccountState(); setAuthMode("signup");
+  if (trackedOrder || paymentReturned) openAccount("signin");
   loadMaintenanceMode();
   document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); closeContactForm(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
