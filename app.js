@@ -666,6 +666,29 @@
     const luminance = .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
     return luminance < .38 ? "#ffffff" : "#0b2f4d";
   }
+  function missingDetailChoices() {
+    const matches = (options, value) => !options?.length || options.some(option => normalizeVariantOption(option) === normalizeVariantOption(value));
+    return [
+      ["#detail-color-group", detailProduct.colors, detailColor, "colour"],
+      ["#detail-size-group", detailProduct.sizes, detailSize, isHairProduct(detailProduct) ? "hair length" : "size"],
+      ["#detail-variant-group", productVariantOptions(detailProduct), detailVariant, isHairProduct(detailProduct) ? "closure size" : detailProduct.types?.length ? "type" : "option"]
+    ].filter(([, options, value]) => !matches(options, value));
+  }
+  function promptDetailChoices() {
+    const missing = missingDetailChoices();
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    $("#detail-purchase-status").textContent = `Please choose ${missing.map(choice => choice[3]).join(" and ")} before adding to your bag.`;
+    missing.forEach(([selector]) => {
+      const group = $(selector);
+      group.classList.add("choice-required");
+      if (!reduced && group.animate) {
+        group.getAnimations?.().forEach(animation => animation.cancel());
+        group.animate([{transform:"translateX(0)"},{transform:"translateX(-5px)"},{transform:"translateX(5px)"},{transform:"translateX(-3px)"},{transform:"translateX(3px)"},{transform:"translateX(0)"}], {duration:360,easing:"ease-in-out"});
+      }
+    });
+    const first = missing.length && $(missing[0][0]);
+    if (first) { first.scrollIntoView({behavior:reduced?"instant":"smooth",block:"center"}); first.querySelector("button")?.focus({preventScroll:true}); }
+  }
   function renderDetailOptions() {
     if (!detailProduct) return;
     $("#detail-color-group").hidden = !detailProduct.colors?.length;
@@ -685,7 +708,10 @@
     const missingChoice = !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     const unavailable = detailProduct.availability === "out_of_stock";
     $("#detail-price").innerHTML = productPurchaseMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
-    $("#detail-add").disabled = unavailable || missingChoice;
+    $("#detail-add").disabled = unavailable;
+    ["#detail-color-group", "#detail-size-group", "#detail-variant-group"].forEach(selector => {
+      if (!missingDetailChoices().some(choice => choice[0] === selector)) $(selector).classList.remove("choice-required");
+    });
     $("#detail-purchase-status").textContent = missingChoice && !unavailable ? "Choose the available options to continue." : $("#detail-availability").textContent;
   }
   function openProductDetail(product) {
@@ -757,7 +783,8 @@
     $("#detail-variants [aria-pressed='true']")?.focus({ preventScroll: true });
   });
   $("#detail-add").addEventListener("click", () => {
-    if (!detailProduct || detailProduct.availability === "out_of_stock" || !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) return;
+    if (!detailProduct || detailProduct.availability === "out_of_stock") return;
+    if (!cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant })) { promptDetailChoices(); return; }
     addProductToCart(detailProduct, detailColor, detailSize, detailVariant);
     closeProductDetail();
   });

@@ -30,13 +30,13 @@ function catalog(usd = false) {
   return data.products[0];
 }
 const elements = new Map();
-const $ = name => { if (!elements.has(name)) elements.set(name, { textContent: '', innerHTML: '', firstChild: { textContent: '' } }); return elements.get(name); };
+const $ = name => { if (!elements.has(name)) elements.set(name, { textContent: '', innerHTML: '', firstChild: { textContent: '' }, classList: {add(){}, remove(){}} }); return elements.get(name); };
 const context = vm.createContext({ $, products: [], cart: new Map(), money: n => `GHS ${Number(n).toFixed(2)}`, escapeHtml: String, escapeAttr: String, swatchFor: () => '#000', swatchMarkFor: () => '#fff', productGallery: () => ({ colorPhotos: new Map(), typePhotos: new Map() }), resolveProductImage: String });
 vm.runInContext(app.slice(app.indexOf('  function parseCartKey('), app.indexOf('  function saveCart(')), context);
 vm.runInContext(app.slice(app.indexOf('  function selectionPhoto('), app.indexOf('  function resolveProductImage(')), context);
 vm.runInContext(app.slice(app.indexOf('  function shippingMarkup('), app.indexOf('  function productCardMarkup(')), context);
 context.syncRequiredFields = () => {};
-vm.runInContext(app.slice(app.indexOf('  function renderDetailOptions('), app.indexOf('  function openProductDetail(')), context);
+vm.runInContext(app.slice(app.indexOf('  function missingDetailChoices('), app.indexOf('  function openProductDetail(')), context);
 for (const product of [catalog(), catalog(true)]) {
   for (const [size, variant, expected] of [['12 inches', '2 x 4', 250], ['12 inches', '4 x 4', 300], ['14 inches', '2 x 4', 320], ['14 inches', '4 x 4', 350]]) {
     assert.equal(context.regularPriceFor(product, { color: 'Black', size, variant }), expected);
@@ -59,8 +59,20 @@ for (const product of [catalog(), catalog(true)]) {
   assert.equal($('#detail-variant-group strong').textContent, 'Closure Size *');
   assert($('#detail-price').innerHTML.includes('350.00') && $('#detail-price').innerHTML.includes('Shipping: GHS 50.00'));
   context.detailSize = ''; context.detailVariant = ''; context.renderDetailOptions();
-  assert.equal($('#detail-add').disabled, true);
+  assert.equal($('#detail-add').disabled, false, 'Missing choices must allow a click to prompt selection');
+  assert.equal(context.missingDetailChoices().length, 2);
 }
+let shakes=0,focuses=0,scrolls=0;
+context.window={matchMedia:()=>({matches:false})};
+for(const selector of ['#detail-size-group','#detail-variant-group']){
+ const group=$(selector);group.animate=()=>{shakes++;};group.scrollIntoView=()=>{scrolls++;};group.querySelector=()=>({focus(){focuses++;}});
+}
+context.promptDetailChoices();
+assert.equal(shakes,2,'Only missing hair length and closure size should shake');
+assert.equal(focuses,1);assert.equal(scrolls,1);
+assert($('#detail-purchase-status').textContent.includes('hair length and closure size'));
+context.window.matchMedia=()=>({matches:true});context.promptDetailChoices();
+assert.equal(shakes,2,'Reduced-motion preference must suppress shaking');
 context.document = { body: { classList: { add() {} } } };
 context.variantBackdrop = { classList: { add() {} }, setAttribute() {} };
 vm.runInContext(app.slice(app.indexOf('  function fillVariantSelect('), app.indexOf('  function closeVariantPicker(')), context);
