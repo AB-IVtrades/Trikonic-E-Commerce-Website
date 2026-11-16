@@ -48,6 +48,22 @@
     return Number.isSafeInteger(quantity) && quantity > 0 ? `${quantity} in stock` : "In stock";
   }
   function normalizeVariantOption(value) { return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
+  function isHairProduct(product) { return /\bhair\b/i.test(String(product?.category || "")); }
+  function optionLabels(product) { return isHairProduct(product) ? { size: "Hair Length", variant: "Closure Size" } : { size: "Size", variant: "Option" }; }
+  function optionDescriptions(item) {
+    const labels = optionLabels(item.category ? item : products.find(product => product.id === item.id) || item);
+    return [item.color && `Colour: ${item.color}`, item.size && `${labels.size}: ${item.size}`, item.variant && `${labels.variant}: ${item.variant}`].filter(Boolean);
+  }
+  function normalizeHairLength(value) {
+    const text = normalizeVariantOption(value);
+    const match = text.match(/^(\d+(?:\.\d+)?)\s*(?:inches|inch|in|["″])?$/);
+    return match ? `${Number(match[1])}in` : text;
+  }
+  function normalizeClosureSize(value) {
+    const text = normalizeVariantOption(value);
+    const match = text.match(/^(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)(?:\s*closure)?$/);
+    return match ? `${Number(match[1])}x${Number(match[2])}` : text;
+  }
   function productVariantOptions(product) {
     if (product?.types?.length) return product.types;
     return [...new Set((product?.variantPrices || []).map(option => String(option.label || "").trim()).filter(Boolean))];
@@ -57,7 +73,12 @@
     const color = normalizeVariantOption(selection.color), size = normalizeVariantOption(selection.size);
     const find = (matchColor, matchSize) => prices.find(option => normalizeVariantOption(option.color) === matchColor && normalizeVariantOption(option.size) === matchSize);
     const variant = normalizeVariantOption(selection.variant);
-    const match = (color && size && find(color, size)) || (variant && prices.find(option => normalizeVariantOption(option.label) === variant)) || (color && find(color, "")) || (size && find("", size));
+    // The existing Sheet API serializes two-part rules as color/size. For hair,
+    // those same two fields represent Hair Length | Closure Size.
+    const hairCombination = isHairProduct(product) && selection.size && selection.variant && prices.find(option =>
+      normalizeHairLength(option.color) === normalizeHairLength(selection.size) &&
+      normalizeClosureSize(option.size) === normalizeClosureSize(selection.variant));
+    const match = hairCombination || (color && size && find(color, size)) || (variant && prices.find(option => normalizeVariantOption(option.label) === variant)) || (color && find(color, "")) || (size && find("", size));
     return Number(match?.price) || Number(product?.price) || 0;
   }
   function shippingFeeFor(product) {
@@ -82,6 +103,11 @@
     return onSale ? `<span class="sale-prices"><s>${money(regular)}</s><strong>${money(current)}</strong></span>` : `${prefix}<strong>${money(current)}</strong>`;
   }
   function productStartingPrice(product) {
+    if (isHairProduct(product)) {
+      const choices = values => values?.length ? values : [""];
+      const prices = choices(product.colors).flatMap(color => choices(product.sizes).flatMap(size => choices(productVariantOptions(product)).map(variant => priceFor(product, { color, size, variant }, true).current)));
+      return Math.min(...prices.filter(price => price > 0));
+    }
     const options = (product?.variantPrices || []).map(option => ({ color: option.color, size: option.size, variant: option.label }));
     const prices = [priceFor(product, {}, true).current, ...options.map(option => priceFor(product, option, true).current)].filter(price => price > 0);
     return Math.min(...prices);
@@ -120,7 +146,7 @@
       const { current, regular, onSale } = priceFor(product, { color, size, variant });
       const quantity = cart.get(key);
       return {
-        id: product.id, name: product.name, image: selectionPhoto(product, selection), color, size, variant, availability: product.availability,
+        id: product.id, name: product.name, category: product.category, image: selectionPhoto(product, selection), color, size, variant, availability: product.availability,
         flashSale: onSale, quantity, unitPrice: current, originalUnitPrice: regular,
         lineTotal: Math.round(current * 100) * quantity / 100,
         // Charge shipping once for this cart line, regardless of quantity.
@@ -152,7 +178,7 @@
   function renderCheckoutReceipt(items, target = "#checkout-receipt-items", totalTarget = "#checkout-total") {
     const { subtotal, shipping, total } = orderTotals(items);
     const rows = items.map(item => {
-      const options = [item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`, item.variant && `Option: ${item.variant}`].filter(Boolean);
+      const options = optionDescriptions(item);
       return `<div class="receipt-line"><span>${item.quantity} × ${escapeHtml(item.name)}${options.length ? `<small class="variant-summary">${options.map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(item.lineTotal)}</strong></div>`;
     });
     rows.push(`<div class="receipt-line"><span>Items subtotal</span><strong>${money(subtotal)}</strong></div>`);
@@ -201,7 +227,7 @@
     order.items.forEach(item => {
       const availability = item.availability === "preorder" ? " (PRE-ORDER)" : item.availability === "out_of_stock" ? " (OUT OF STOCK)" : "";
       const sale = item.flashSale ? " (FLASH SALE)" : "";
-      const options = [item.color && `Color: ${item.color}`, item.size && `Size: ${item.size}`, item.variant && `Option: ${item.variant}`].filter(Boolean).join(", ");
+      const options = optionDescriptions(item).join(", ");
       write(`${item.quantity} x ${item.name}${options ? ` (${options})` : ""}${availability}${sale} - GHS ${(Number(item.lineTotal) || 0).toFixed(2)}`, 10, 8);
     });
     rule();
@@ -281,7 +307,7 @@
     const preorder = p.availability === "preorder";
     const outOfStock = p.availability === "out_of_stock";
     const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : inStockLabel(p).toUpperCase();
-    const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} sizes`].filter(Boolean).join(" · ");
+    const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} ${isHairProduct(p) ? "hair lengths" : "sizes"}`, isHairProduct(p) && productVariantOptions(p).length && `${productVariantOptions(p).length} closure sizes`].filter(Boolean).join(" · ");
     const startPrice = productStartingPrice(p);
     const regularPrice = priceFor(p, {}, true).regular;
     const price = p.flashSale && startPrice < regularPrice ? `<span class="sale-prices"><s>${money(regularPrice)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
@@ -393,7 +419,7 @@
       const name = escapeHtml(product?.name || "Unavailable product");
       const itemKey = escapeAttr(key);
       const unavailable = cartItemIsUnavailable(product, selection);
-      const options = [selection.color, selection.size, selection.variant].filter(Boolean).map(escapeHtml).join(" · ");
+      const options = (isHairProduct(product) ? optionDescriptions({ ...selection, category: product.category }) : [selection.color, selection.size, selection.variant].filter(Boolean)).map(escapeHtml).join(" · ");
       const image = product && selectionPhoto(product, selection);
       return `<article class="cart-page-item">
         <input type="checkbox" data-cart-select="${itemKey}" aria-label="Select ${name}${options ? `, ${options}` : ""} for checkout" ${excludedCartItems.has(key) ? "" : "checked"}>
@@ -524,11 +550,13 @@
     $("#detail-size-group").hidden = !detailProduct.sizes?.length;
     const variants = productVariantOptions(detailProduct);
     const hasTypes = detailProduct.types?.length > 0;
+    const labels = optionLabels(detailProduct);
+    $("#detail-size-group strong").textContent = labels.size;
     $("#detail-variant-group").hidden = !variants.length;
-    $("#detail-variant-group strong").textContent = hasTypes ? "Type" : "Option";
+    $("#detail-variant-group strong").textContent = isHairProduct(detailProduct) ? labels.variant : hasTypes ? "Type" : "Option";
     $("#detail-color-label").textContent = detailColor ? `Selected: ${detailColor}` : "Choose a colour";
-    $("#detail-size-label").textContent = detailSize ? `Selected: ${detailSize}` : "Choose a size";
-    $("#detail-variant-label").textContent = detailVariant ? `Selected: ${detailVariant}` : hasTypes ? "Choose a type" : "Choose an option";
+    $("#detail-size-label").textContent = detailSize ? `Selected: ${detailSize}` : `Choose ${isHairProduct(detailProduct) ? "hair length" : "a size"}`;
+    $("#detail-variant-label").textContent = detailVariant ? `Selected: ${detailVariant}` : isHairProduct(detailProduct) ? "Choose closure size" : hasTypes ? "Choose a type" : "Choose an option";
     $("#detail-colors").innerHTML = (detailProduct.colors || []).map(color => `<button type="button" class="detail-swatch ${color === detailColor ? "selected" : ""}" style="--swatch:${swatchFor(color)};--swatch-mark:${swatchMarkFor(color)}" data-detail-color="${escapeAttr(color)}" aria-label="${escapeAttr(color)}" aria-pressed="${color === detailColor}"><span class="visually-hidden">${escapeHtml(color)}</span></button>`).join("");
     $("#detail-sizes").innerHTML = (detailProduct.sizes || []).map(size => `<button type="button" class="detail-size ${size === detailSize ? "selected" : ""}" data-detail-size="${escapeAttr(size)}" aria-pressed="${size === detailSize}">${escapeHtml(size)}</button>`).join("");
     $("#detail-variants").innerHTML = variants.map(option => `<button type="button" class="detail-size ${option === detailVariant ? "selected" : ""}" data-detail-variant="${escapeAttr(option)}" aria-pressed="${option === detailVariant}">${escapeHtml(option)}</button>`).join("");
@@ -624,10 +652,12 @@
     $("#variant-size-field").hidden = !product.sizes?.length;
     $("#variant-option-field").hidden = !productVariantOptions(product).length;
     const hasTypes = product.types?.length > 0;
-    $("#variant-option-field").firstChild.textContent = hasTypes ? "Type" : "Option";
+    const labels = optionLabels(product);
+    $("#variant-size-field").firstChild.textContent = labels.size;
+    $("#variant-option-field").firstChild.textContent = isHairProduct(product) ? labels.variant : hasTypes ? "Type" : "Option";
     fillVariantSelect($("#variant-color"), product.colors || [], "colour");
-    fillVariantSelect($("#variant-size"), product.sizes || [], "size");
-    fillVariantSelect($("#variant-option"), productVariantOptions(product), hasTypes ? "type" : "option");
+    fillVariantSelect($("#variant-size"), product.sizes || [], labels.size);
+    fillVariantSelect($("#variant-option"), productVariantOptions(product), isHairProduct(product) ? labels.variant : hasTypes ? "type" : "option");
     $("#variant-status").textContent = "";
     updateVariantPickerPrice();
     variantBackdrop.classList.add("show");
@@ -1160,7 +1190,7 @@
           return `<li class="${done ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><span class="progress-dot" aria-hidden="true"></span><span class="progress-copy"><strong>${escapeHtml(stage)}</strong>${when ? `<time>${escapeHtml(when)}</time>` : ""}</span></li>`;
         }).join("")}</ol>`;
       const latestEvent = events.length ? [...events].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] : null;
-      const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size || item.variant ? `<small class="cart-variant-summary">${[item.color && `Colour: ${item.color}`, item.size && `Size: ${item.size}`, item.variant && `Option: ${item.variant}`].filter(Boolean).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
+      const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size || item.variant ? `<small class="cart-variant-summary">${optionDescriptions(item).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
       const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && !isFinished(current);
       const paymentLine = order.payment_status === "paid" ? `<p class="order-payment-state paid">Payment confirmed</p><button class="paid-receipt-button" type="button" data-receipt-order="${escapeAttr(order.order_number)}">Download payment receipt (PDF)</button>` : unpaid ? `<p class="order-payment-state">Payment pending · Shipping included</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
       return `<details class="order-card"${trackedOrder === order.order_number ? " open" : ""}><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">${tracking ? "View order tracking" : "View order details"} <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;

@@ -61,6 +61,22 @@ Deno.test("receipt totals, escaping, Unicode, PDF pages and photo fallback", asy
     customer_name: "<script>Ama</script>",
   });
   assert(!html.includes("<script>") && html.includes("&lt;script&gt;"));
+  const hairHtml = receiptHtml({
+    ...sample,
+    items: [{
+      name: "Hair Closure",
+      category: "Hair",
+      size: "14 inches",
+      variant: "4 x 4",
+      quantity: 1,
+      lineTotal: 350,
+      shippingTotal: 50,
+    }],
+  });
+  assert(
+    hairHtml.includes("Hair Length: 14 inches") &&
+      hairHtml.includes("Closure Size: 4 x 4"),
+  );
   assert(
     html.includes("#0b3154") && html.includes("#ff710f") &&
       html.includes("GHS 850.00"),

@@ -4,6 +4,7 @@ import { receiptFont } from "./receipt-font.ts";
 
 export type ReceiptItem = {
   name?: string;
+  category?: string;
   image?: string;
   color?: string;
   size?: string;
@@ -80,8 +81,12 @@ const date = (v?: string) =>
 const options = (i: ReceiptItem) =>
   [
     i.color && `Colour: ${i.color}`,
-    i.size && `Size: ${i.size}`,
-    i.variant && `Option: ${i.variant}`,
+    i.size &&
+    `${/\bhair\b/i.test(i.category || "") ? "Hair Length" : "Size"}: ${i.size}`,
+    i.variant &&
+    `${
+      /\bhair\b/i.test(i.category || "") ? "Closure Size" : "Option"
+    }: ${i.variant}`,
   ].filter(Boolean).join(" · ");
 export function safePhoto(source?: string): string {
   try {
