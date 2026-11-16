@@ -29,8 +29,17 @@ vm.runInContext('renderOrders()', context);
 assert(history.innerHTML.includes('data-receipt-order="TRK-1794816000000-PAID"'));
 assert(!history.innerHTML.includes('data-receipt-order="TRK-1794816000000-PEND"'));
 assert(history.innerHTML.includes('<details class="order-card" open>'));
+assert(history.innerHTML.includes('Preparing your order'));
+assert(!history.innerHTML.includes('data-shipment-order'));
+assert(!history.innerHTML.includes('awaiting shipment assignment'));
+const paidCard=history.innerHTML.split('</details>')[0];
+const pendingCard=history.innerHTML.split('</details>')[1];
+assert(paidCard.includes('Preparing your order'));
+assert(!pendingCard.includes('Preparing your order'));
+
 vm.runInContext('orderView = "history"; renderOrders()', context);
 assert(history.innerHTML.includes('data-receipt-order="TRK-1794816000000-DONE"'));
+assert(!history.innerHTML.includes('Preparing your order'));
 const button = { dataset: { receiptOrder: 'TRK-1794816000000-PAID' }, disabled: false, textContent: '' };
 (async () => {
   await history.handler({ target: { closest: selector => selector === '[data-receipt-order]' ? button : null }, preventDefault() {}, stopPropagation() {} });

@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('admin.js','utf8');
+const status={textContent:'',className:''};
+const context=vm.createContext({$:()=>status,message:(text,error=false)=>{status.textContent=text;status.className=error?'error':'';}});
+vm.runInContext(source.slice(source.indexOf(' async function run('),source.indexOf(' function clearPrivateView(')),context);
+assert.match(context.auditLabel('admin_payment_recheck'),/not payment confirmation/);
+assert.equal(context.auditLabel('payment_verified'),'Payment confirmed by Paystack');
+assert.match(context.paymentEvidence({payment_status:'paid'},[]),/historical/);
+assert.match(context.paymentEvidence({payment_status:'paid'},[{action:'payment_verified'}]),/verification recorded/);
+(async()=>{
+ const button={disabled:false};
+ await context.run(button,async()=>context.paymentCheckMessage('success'));
+ assert.match(status.textContent,/Payment confirmed by Paystack/);assert.equal(button.disabled,false);
+ await context.run(button,async()=>context.paymentCheckMessage('pending'));
+ assert.match(status.textContent,/still processing/);assert.notEqual(status.textContent,'Up to date.');
+ await context.run(button,async()=>context.paymentCheckMessage('failed'));
+ assert.match(status.textContent,/unsuccessful/);
+ await context.run(button,async()=>{throw new Error('Verification unavailable');});
+ assert.equal(status.className,'error');assert.equal(button.disabled,false);
+ console.log('Admin messages passed: request versus confirmation, historical payments, success, pending, failed and errors.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
