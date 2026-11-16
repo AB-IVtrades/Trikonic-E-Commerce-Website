@@ -344,7 +344,7 @@ Deno.test("payment initialization uses saved amount, reserves before Paystack an
       );
       assert(
         body.callback_url ===
-          "https://trikonicimports.com/?payment=return#home",
+          "https://trikonicimports.com/?payment=return",
       );
       initialized++;
       return Response.json({

@@ -150,7 +150,7 @@ Deno.serve(async (request) => {
           amount,
           currency: "GHS",
           reference,
-          callback_url: "https://trikonicimports.com/?payment=return#home",
+          callback_url: "https://trikonicimports.com/?payment=return",
           metadata: {
             order_number: order.order_number,
             order_id: order.id,
