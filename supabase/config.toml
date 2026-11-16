@@ -33,3 +33,7 @@ verify_jwt = true
 
 [functions.process-order-jobs]
 verify_jwt = false
+
+# Public, read-only product catalog. Contains no customer data or privileged actions.
+[functions.public-catalog]
+verify_jwt = false

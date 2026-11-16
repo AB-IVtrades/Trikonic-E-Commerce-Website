@@ -470,25 +470,23 @@
   if (Number.isFinite(maxPriceFilter) && $("#max-price")) { $("#max-price").value = maxPriceFilter; $("#max-price-label").textContent = `Max Price: GH₵${maxPriceFilter.toLocaleString()}`; }
   $("#sort-products")?.addEventListener("change", event => { productSort = event.currentTarget.value; renderProducts(); });
   $("#max-price")?.addEventListener("input", event => { maxPriceFilter = Number(event.currentTarget.value); const label = $("#max-price-label"); if (label) label.textContent = `Max Price: GH₵${maxPriceFilter.toLocaleString()}`; renderProducts(); });
-  function loadProductsFromSheet() {
-    const endpoint = window.TRikonicOrderEndpoint || "";
+  async function loadProductsFromSheet() {
     const finishCatalogLoad = () => { renderCategories(); renderProducts(); renderCart(); };
-    if (!endpoint) { catalogState = "error"; finishCatalogLoad(); return; }
-    window.receiveTrikonicProducts = catalog => {
-      if (!catalog || !Array.isArray(catalog.products)) { catalogState = "error"; finishCatalogLoad(); return; }
-      products = catalog.ready ? catalog.products : [];
+    try {
+      if (!supabaseConfig.url) throw new Error("Catalog endpoint unavailable");
+      const response = await fetch(`${supabaseConfig.url}/functions/v1/public-catalog`, {
+        signal: AbortSignal.timeout(20000), credentials: "omit"
+      });
+      if (!response.ok) throw new Error("Catalog request failed");
+      const catalog = await response.json();
+      if (!catalog?.ready || !Array.isArray(catalog.products)) throw new Error("Invalid catalog response");
+      products = catalog.products;
       catalogState = products.length ? "ready" : "empty";
-      clearTimeout(catalogLoadTimeout);
-      finishCatalogLoad();
-    };
-    const script = document.createElement("script");
-    const url = new URL(endpoint);
-    url.searchParams.set("callback", "receiveTrikonicProducts");
-    url.searchParams.set("t", String(Date.now()));
-    script.src = url.toString();
-    const catalogLoadTimeout = setTimeout(() => { if (catalogState === "loading") { catalogState = "error"; finishCatalogLoad(); } }, 15000);
-    script.onerror = () => { clearTimeout(catalogLoadTimeout); catalogState = "error"; finishCatalogLoad(); console.warn("Could not load the storefront catalog from Google Sheets."); };
-    document.head.appendChild(script);
+    } catch (_) {
+      catalogState = "error";
+      console.warn("Could not load the storefront catalog.");
+    }
+    finishCatalogLoad();
   }
   const mobileNav = $("#mobile-sidebar");
   const mobileNavBackdrop = $("#mobile-nav-backdrop");

