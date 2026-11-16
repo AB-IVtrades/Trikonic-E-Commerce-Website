@@ -29,6 +29,9 @@
   const {data:{session}}=await client.auth.getSession();if(seq!==epoch)return;user=session?.user||null;$('#signout').hidden=!user;
   if(!user){$('#login').hidden=false;message('Sign in to manage orders.');return;}
   try{
+   const active=await client.rpc('is_current_session_active');if(seq!==epoch)return;
+   if(active.error)throw new Error('Could not verify your sign-in. Please refresh and try again.');
+   if(active.data!==true){user=null;clearPrivateView();$('#login').hidden=false;await client.auth.signOut({scope:'local'});return;}
    const access=await api('admin-orders',{action:'access'});if(seq!==epoch)return;
    if(access.mfaRequired){
     $('#mfa').hidden=false;const {data,error}=await client.auth.mfa.listFactors();if(error)throw error;if(seq!==epoch)return;
@@ -103,6 +106,6 @@
  $('#delivery-filter').insertAdjacentHTML('beforeend',[...stages,'Order Cancelled'].map(stage=>`<option>${esc(stage)}</option>`).join(''));
  let checkingDevice=false;
  async function checkDevice(){if(!user||checkingDevice||document.visibilityState==='hidden')return;checkingDevice=true;const owner=user.id;try{const token=(await client.auth.getSession()).data.session?.access_token;const {data,error}=await client.rpc('is_current_session_active');if(!error&&data===false&&user?.id===owner&&(await client.auth.getSession()).data.session?.access_token===token){clearPrivateView();await client.auth.signOut({scope:'local'});}}catch{}finally{checkingDevice=false;}}
- window.addEventListener('focus',checkDevice);document.addEventListener('visibilitychange',checkDevice);setInterval(checkDevice,60000);
+ window.addEventListener('focus',checkDevice);window.addEventListener('pageshow',()=>{clearPrivateView();boot();});document.addEventListener('visibilitychange',checkDevice);setInterval(checkDevice,60000);
  client.auth.onAuthStateChange(()=>{clearPrivateView();setTimeout(boot,0);});boot();
 })();

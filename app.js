@@ -1582,12 +1582,33 @@
     } finally { submit.disabled = false; }
   });
   let checkingSession = false;
+  let authStateVersion = 0;
   async function checkDeviceSession() {
-    if (!signedInUser || !supabaseClient || checkingSession || document.visibilityState === "hidden") return;
-    checkingSession = true; const owner = signedInUser.id;
-    try { const token = (await supabaseClient.auth.getSession()).data.session?.access_token; const {data,error} = await supabaseClient.rpc("is_current_session_active"); if (!error && data === false && signedInUser?.id === owner && (await supabaseClient.auth.getSession()).data.session?.access_token === token) await supabaseClient.auth.signOut({scope:"local"}); } catch (_) {} finally { checkingSession=false; }
+    if (!supabaseClient || checkingSession || document.visibilityState === "hidden") return;
+    checkingSession = true;
+    try {
+      const {data:{session}} = await supabaseClient.auth.getSession();
+      if (!session) return;
+      const {data,error} = await supabaseClient.rpc("is_current_session_active");
+      if (error || (await supabaseClient.auth.getSession()).data.session?.access_token !== session.access_token) return;
+      if (data === false) {
+        signedInUser=null; accountOrders=[]; authReady=true; renderAccountState();
+        await supabaseClient.auth.signOut({scope:"local"});
+      } else if (data === true && !signedInUser && authReady) {
+        await applyAuthState("SIGNED_IN",session,++authStateVersion);
+      }
+    } catch (_) {} finally { checkingSession=false; }
   }
   window.addEventListener("focus",checkDeviceSession);
+  window.addEventListener("pageshow",event=>{
+    if (!event.persisted || !supabaseClient) { checkDeviceSession(); return; }
+    const version=++authStateVersion;
+    authReady=false; signedInUser=null; accountOrders=[]; renderAccountState();
+    setTimeout(async()=>{
+      try { const {data,error}=await supabaseClient.auth.getSession(); if(error)throw error; await applyAuthState("PAGE_RESTORED",data.session,version); }
+      catch (_) { if(version===authStateVersion){authReady=true;renderAccountState();} }
+    },0);
+  });
   document.addEventListener("visibilitychange",checkDeviceSession);
   setInterval(checkDeviceSession,60000);
   async function signOut(status) {
@@ -1597,11 +1618,27 @@
     else { signedInUser = null; renderAccountState(); setAuthMode("signin"); }
   }
   $("#account-signout").addEventListener("click", () => signOut($("#orders-status")));
-  if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-      authReady = true;
-      signedInUser = session?.user || null;
-      if (!signedInUser) { accountOrders=[]; $("#order-history").replaceChildren(); }
+  async function applyAuthState(event, session, version) {
+    if (version !== authStateVersion) return;
+    if (session) {
+      try {
+        const {data,error} = await supabaseClient.rpc("is_current_session_active");
+        if (version !== authStateVersion) return;
+        if (error || typeof data !== "boolean") throw new Error("Session verification unavailable");
+        if (!data) {
+          authReady=true; signedInUser=null; renderAccountState();
+          await supabaseClient.auth.signOut({scope:"local"});
+          return;
+        }
+      } catch (_) {
+        if (version !== authStateVersion) return;
+        authReady=true; signedInUser=null; renderAccountState();
+        $("#account-status").textContent="We couldn’t verify your sign-in. Please refresh and try again.";
+        return;
+      }
+    }
+    if (version !== authStateVersion) return;
+    authReady=true; signedInUser=session?.user || null;
       if (verifiedPaymentUserId !== signedInUser?.id) { paymentVerificationComplete = false; verifiedPaymentUserId = ""; returnedOrderNumber = ""; }
       if (verifiedAdminUserId !== signedInUser?.id) verifiedAdminUserId = "";
       setTimeout(refreshAdminAccess, 0);
@@ -1619,6 +1656,14 @@
         closeAccount();
         openCheckout();
       }
+  }
+  if (supabaseClient) {
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      const version=++authStateVersion;
+      // Never paint a cached account until its server session has been checked.
+      authReady=false; signedInUser=null; accountOrders=[];
+      renderAccountState();
+      setTimeout(()=>applyAuthState(event,session,version),0);
     });
   }
   renderAccountState(); setAuthMode("signup");
