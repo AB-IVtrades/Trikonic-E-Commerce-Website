@@ -27,7 +27,7 @@
   const {data:existing,error:listError}=await client.auth.mfa.listFactors();if(listError)throw listError;
   for(const factor of existing.all.filter(f=>f.factor_type==='totp'&&f.status==='unverified')){const {error}=await client.auth.mfa.unenroll({factorId:factor.id});if(error)throw error;}
   const {data,error}=await client.auth.mfa.enroll({factorType:'totp',friendlyName:'Trikonic store admin'});if(error)throw error;
-  factorId=data.id;$('#qr').src=`data:image/svg+xml;utf8,${encodeURIComponent(data.totp.qr_code)}`;$('#qr').hidden=false;$('#mfa-form').hidden=false;$('#enroll').hidden=true;
+  factorId=data.id;$('#qr').src=data.totp.qr_code;$('#qr').hidden=false;$('#mfa-form').hidden=false;$('#enroll').hidden=true;
  }));
  $('#mfa-form').addEventListener('submit',e=>{e.preventDefault();run(e.submitter,async()=>{
   const form=e.currentTarget;const code=new FormData(form).get('code');const {data,error}=await client.auth.mfa.challenge({factorId});if(error)throw error;
