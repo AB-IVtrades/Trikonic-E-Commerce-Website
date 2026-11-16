@@ -1,8 +1,10 @@
+import { rateLimit } from "../_shared/limits.ts";
 import {
   cors,
   customer,
   failure,
   json,
+  readJson,
   RequestError,
 } from "../_shared/server.ts";
 import { loadCatalog, priceOrder } from "../_shared/catalog.ts";
@@ -15,7 +17,8 @@ Deno.serve(async (request) => {
   }
   try {
     const { user, env } = await customer(request);
-    const payload = await request.json();
+    await rateLimit("checkout", user.id, 10, 60);
+    const payload = await readJson(request);
     const setting = await fetch(
       `${env.url}/rest/v1/site_settings?id=eq.1&select=maintenance_mode`,
       { headers: env.headers },

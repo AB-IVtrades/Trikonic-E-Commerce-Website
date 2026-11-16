@@ -1,8 +1,11 @@
+import { syncOrderSheet } from "../_shared/sheets.ts";
+import { rateLimit } from "../_shared/limits.ts";
 import {
   cors,
   customer,
   failure,
   json,
+  readJson,
   RequestError,
   rows,
 } from "../_shared/server.ts";
@@ -18,11 +21,12 @@ Deno.serve(async (request) => {
   let reservedReference = "";
   try {
     const { user, env } = await customer(request);
+    await rateLimit("initialize-payment", user.id, 20, 60);
     const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
     if (!secret) {
       throw new RequestError("Online payment is temporarily unavailable.", 503);
     }
-    const { orderNumber } = await request.json();
+    const { orderNumber } = await readJson(request);
     if (
       typeof orderNumber !== "string" ||
       !/^TRK-[0-9]{13}-[A-Z0-9]{4}$/.test(orderNumber)
@@ -44,6 +48,7 @@ Deno.serve(async (request) => {
       );
     }
     await assertTrustedPricing(order);
+    await syncOrderSheet(order);
     const [active] = await rows("payment_attempts", {
       order_id: `eq.${order.id}`,
       state: "in.(initializing,ready)",

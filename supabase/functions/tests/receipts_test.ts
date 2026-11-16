@@ -179,6 +179,9 @@ Deno.test("download authenticates users, checks ownership and blocks unpaid orde
   Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "secret");
   globalThis.fetch = async (input: string | URL | Request, init?: any) => {
     const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
+      return Response.json(true);
+    }
     if (url.pathname === "/auth/v1/user") {
       return mode === "bad-auth"
         ? new Response("{}", { status: 401 })

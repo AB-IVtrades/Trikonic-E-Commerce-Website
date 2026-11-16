@@ -18,3 +18,6 @@ verify_jwt = true
 
 [functions.verify-payment]
 verify_jwt = true
+
+[functions.contact-message]
+verify_jwt = false

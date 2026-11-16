@@ -90,7 +90,12 @@
   let category = new URLSearchParams(location.search).get("category") || "All finds";
   let searchTerm = new URLSearchParams(location.search).get("search") || "";
   let maxPriceFilter = Number.POSITIVE_INFINITY;
-  let productSort = "recommended";
+  let productSort = new URLSearchParams(location.search).get("sort") || "recommended";
+  const PRODUCTS_PER_PAGE = 24;
+  let productPage = Math.max(1, Math.floor(Number(new URLSearchParams(location.search).get("page")) || 1));
+  let lastProductFilters = "";
+  const initialMaxPrice = new URLSearchParams(location.search).get("maxPrice");
+  if (initialMaxPrice && Number(initialMaxPrice) > 0) maxPriceFilter = Number(initialMaxPrice);
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
   const cartPage = $("#cart-page");
@@ -162,14 +167,14 @@
     const { regular, current, onSale } = priceFor(product, selection, includeShipping);
     return onSale ? `<span class="sale-prices"><s>${money(regular)}</s><strong>${money(current)}</strong></span>` : `${prefix}<strong>${money(current)}</strong>`;
   }
-  function productStartingPrice(product) {
+  function productStartingPrice(product, includeShipping = true) {
     if (isHairProduct(product)) {
       const choices = values => values?.length ? values : [""];
-      const prices = choices(product.colors).flatMap(color => choices(product.sizes).flatMap(size => choices(productVariantOptions(product)).map(variant => priceFor(product, { color, size, variant }, true).current)));
+      const prices = choices(product.colors).flatMap(color => choices(product.sizes).flatMap(size => choices(productVariantOptions(product)).map(variant => priceFor(product, { color, size, variant }, includeShipping).current)));
       return Math.min(...prices.filter(price => price > 0));
     }
     const options = (product?.variantPrices || []).map(option => ({ color: option.color, size: option.size, variant: option.label }));
-    const prices = [priceFor(product, {}, true).current, ...options.map(option => priceFor(product, option, true).current)].filter(price => price > 0);
+    const prices = [priceFor(product, {}, includeShipping).current, ...options.map(option => priceFor(product, option, includeShipping).current)].filter(price => price > 0);
     return Math.min(...prices);
   }
   function cartSelectionIsValid(product, selection) {
@@ -230,9 +235,20 @@
       url.searchParams.set("v", catalogImageVersion);
       return url.toString();
     }
-    if (/^(https?:\/\/|data:|blob:|\/)/i.test(image)) return image;
+    if (/^https:\/\//i.test(image)) { try { const url = new URL(image); return !url.username && !url.password ? url.href : ""; } catch { return ""; } }
+    if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(image) || image.includes("\\")) return "";
     const path = image.replace(/^\.\//, "");
     return path.includes("/") ? path : `images/${path}`;
+  }
+  function syncRequiredFields() {
+    document.querySelectorAll("label").forEach(label => {
+      const control = label.querySelector("input, select, textarea"), text = label.querySelector(".field-label");
+      if (!control || !text) return;
+      let mark = text.querySelector(".required-mark");
+      if (!mark) { mark = document.createElement("span"); mark.className = "required-mark"; mark.textContent = " *"; mark.setAttribute("aria-hidden", "true"); text.appendChild(mark); }
+      mark.hidden = !control.required;
+      control.setAttribute("aria-required", String(control.required));
+    });
   }
   let savedReceiptOrder = null;
   function renderCheckoutReceipt(items, target = "#checkout-receipt-items", totalTarget = "#checkout-total") {
@@ -337,12 +353,37 @@
     }, 0);
   }
 
+  function paginatedProducts(items, page, size = PRODUCTS_PER_PAGE) {
+    const pages = Math.max(1, Math.ceil(items.length / size));
+    const current = Math.min(pages, Math.max(1, Math.floor(Number(page)) || 1));
+    return { items: items.slice((current - 1) * size, current * size), current, pages, start: (current - 1) * size };
+  }
+  function writeCatalogUrl(push = false) {
+    if (!grid || homeMore) return;
+    const url = new URL(location.href);
+    const values = { page: productPage > 1 ? productPage : "", category: category === "All finds" ? "" : category, search: searchTerm.trim(), sort: productSort === "recommended" ? "" : productSort, maxPrice: Number.isFinite(maxPriceFilter) ? maxPriceFilter : "" };
+    Object.entries(values).forEach(([key, value]) => value ? url.searchParams.set(key, String(value)) : url.searchParams.delete(key));
+    history[push ? "pushState" : "replaceState"](null, "", url.pathname + url.search + url.hash);
+  }
+  function renderPagination(page) {
+    const nav = $("#product-pagination");
+    if (!nav) return;
+    nav.hidden = page.pages <= 1;
+    if (nav.hidden) { nav.innerHTML = ""; return; }
+    const button = (number, label, disabled = false) => `<button type="button" data-product-page="${number}" ${disabled ? "disabled" : ""} ${number === page.current && !disabled ? 'aria-current="page"' : ""} aria-label="${escapeAttr(label)}">${escapeHtml(label)}</button>`;
+    const numbers = [...new Set([1, page.current - 1, page.current, page.current + 1, page.pages])].filter(number => number > 0 && number <= page.pages).sort((a,b) => a-b);
+    nav.innerHTML = button(page.current-1, "Previous", page.current === 1) + numbers.map((number, index) => (index && number - numbers[index-1] > 1 ? '<span aria-hidden="true">…</span>' : "") + button(number, String(number))).join("") + button(page.current+1, "Next", page.current === page.pages);
+  }
   function renderProducts() {
     if (!grid) return;
     if (homeMore) homeMore.hidden = true;
+    if ($("#product-pagination")) $("#product-pagination").hidden = true;
     if (catalogState === "loading") { grid.innerHTML = '<p class="catalog-message">Loading the latest finds…</p>'; return; }
     if (catalogState === "error") { grid.innerHTML = '<p class="catalog-message">We couldn’t load the catalog right now. Please refresh in a moment.</p>'; return; }
     if (catalogState === "empty") { grid.innerHTML = '<p class="catalog-message">No products are published right now. Please check back soon.</p>'; return; }
+    const filters = JSON.stringify([category, searchTerm, productSort, maxPriceFilter, collection]);
+    if (lastProductFilters && lastProductFilters !== filters) { productPage = 1; writeCatalogUrl(); }
+    lastProductFilters = filters;
     const query = searchTerm.trim().toLowerCase();
     let shown = products.filter(p => (category === "All finds" || p.category === category) && productStartingPrice(p) <= maxPriceFilter && (!query || `${p.name} ${p.category} ${p.description} ${(p.colors || []).join(" ")} ${(p.sizes || []).join(" ")}`.toLowerCase().includes(query)));
     if (collection === "in-stock") shown = shown.filter(p => p.availability === "in_stock");
@@ -353,25 +394,35 @@
     else if (productSort === "name") shown = shown.sort((a, b) => a.name.localeCompare(b.name));
     const resultCount = $("#product-result-count");
     const filteredCollection = Object.hasOwn(collectionLabel, collection);
-    if (resultCount) resultCount.textContent = `Showing ${catalogProductCount(shown)} of ${catalogProductCount(products)} products${filteredCollection ? ` · ${collectionLabel[collection]}` : ""}`;
+    const page = paginatedProducts(shown, productPage);
+    productPage = page.current;
+    if (resultCount) resultCount.textContent = shown.length ? `Showing ${page.start + 1}–${page.start + page.items.length} of ${shown.length} finds${filteredCollection ? ` · ${collectionLabel[collection]}` : ""}` : "0 finds";
     const clearCollection = $("#clear-shop-collection");
     if (clearCollection) clearCollection.hidden = !filteredCollection;
     if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products match these filters right now."}</p>`; return; }
-    grid.innerHTML = (homeMore ? shown.slice(0, 5) : shown).map(productCardMarkup).join("");
+    grid.innerHTML = (homeMore ? shown.slice(0, 5) : page.items).map(productCardMarkup).join("");
+    if (!homeMore) renderPagination(page);
     if (homeMore && shown.length > 5) {
       $("#home-more-grid").innerHTML = shown.slice(5, 10).map(productCardMarkup).join("");
       homeMore.hidden = false;
     }
+  }
+  function shippingMarkup(product) {
+    const shipping = shippingFeeFor(product);
+    return `<p class="product-shipping">${shipping == null ? "Shipping included" : shipping === 0 ? "Shipping: Free" : `Shipping: ${money(shipping)}`}</p>`;
+  }
+  function productPurchaseMarkup(product, selection = {}) {
+    return priceMarkup(product, selection) + shippingMarkup(product);
   }
   function productCardMarkup(p) {
     const preorder = p.availability === "preorder";
     const outOfStock = p.availability === "out_of_stock";
     const availabilityLabel = preorder ? "PRE-ORDER" : outOfStock ? "OUT OF STOCK" : inStockLabel(p).toUpperCase();
     const optionsLabel = [p.colors?.length && `${p.colors.length} colours`, p.sizes?.length && `${p.sizes.length} ${isHairProduct(p) ? "hair lengths" : "sizes"}`, isHairProduct(p) && productVariantOptions(p).length && `${productVariantOptions(p).length} closure sizes`].filter(Boolean).join(" · ");
-    const startPrice = productStartingPrice(p);
-    const regularPrice = priceFor(p, {}, true).regular;
+    const startPrice = productStartingPrice(p, false);
+    const regularPrice = priceFor(p).regular;
     const price = p.flashSale && startPrice < regularPrice ? `<span class="sale-prices"><s>${money(regularPrice)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
-    return `<article class="product-card"><div class="product-photo" style="--product-bg:${p.color || "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}">→</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><div class="product-card-price">${price}</div><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div></div></article>`;
+    return `<article class="product-card"><div class="product-photo" style="--product-bg:${/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(p.color || "") ? p.color : "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}">→</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><div class="product-card-price">${price}</div>${shippingMarkup(p)}<p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div></div></article>`;
   }
   function renderCategories() {
     const categoryRow = $("#categories");
@@ -406,6 +457,17 @@
   $("#product-search").value = searchTerm;
   $("#product-search").addEventListener("input", event => { searchTerm = event.currentTarget.value; renderProducts(); });
   $("#search-form").addEventListener("submit", event => { event.preventDefault(); searchTerm = $("#product-search").value.trim(); if (!["shop.html", "categories.html"].includes(location.pathname.split("/").pop())) { location.href = `shop.html?search=${encodeURIComponent(searchTerm)}`; return; } renderProducts(); $("#shop").scrollIntoView({ behavior: "smooth" }); });
+  if ($("#sort-products")) $("#sort-products").value = productSort;
+  window.addEventListener("popstate", () => {
+    const params = new URLSearchParams(location.search);
+    productPage = Math.max(1, Math.floor(Number(params.get("page")) || 1));
+    category = params.get("category") || "All finds"; searchTerm = params.get("search") || "";
+    productSort = params.get("sort") || "recommended"; maxPriceFilter = Number(params.get("maxPrice")) > 0 ? Number(params.get("maxPrice")) : Infinity;
+    lastProductFilters = ""; $("#product-search").value = searchTerm;
+    if ($("#sort-products")) $("#sort-products").value = productSort;
+    renderCategories(); renderProducts();
+  });
+  if (Number.isFinite(maxPriceFilter) && $("#max-price")) { $("#max-price").value = maxPriceFilter; $("#max-price-label").textContent = `Max Price: GH₵${maxPriceFilter.toLocaleString()}`; }
   $("#sort-products")?.addEventListener("change", event => { productSort = event.currentTarget.value; renderProducts(); });
   $("#max-price")?.addEventListener("input", event => { maxPriceFilter = Number(event.currentTarget.value); const label = $("#max-price-label"); if (label) label.textContent = `Max Price: GH₵${maxPriceFilter.toLocaleString()}`; renderProducts(); });
   function loadProductsFromSheet() {
@@ -611,9 +673,9 @@
     const variants = productVariantOptions(detailProduct);
     const hasTypes = detailProduct.types?.length > 0;
     const labels = optionLabels(detailProduct);
-    $("#detail-size-group strong").textContent = labels.size;
+    $("#detail-size-group strong").textContent = labels.size + " *";
     $("#detail-variant-group").hidden = !variants.length;
-    $("#detail-variant-group strong").textContent = isHairProduct(detailProduct) ? labels.variant : hasTypes ? "Type" : "Option";
+    $("#detail-variant-group strong").textContent = (isHairProduct(detailProduct) ? labels.variant : hasTypes ? "Type" : "Option") + " *";
     $("#detail-color-label").textContent = detailColor ? `Selected: ${detailColor}` : "Choose a colour";
     $("#detail-size-label").textContent = detailSize ? `Selected: ${detailSize}` : `Choose ${isHairProduct(detailProduct) ? "hair length" : "a size"}`;
     $("#detail-variant-label").textContent = detailVariant ? `Selected: ${detailVariant}` : isHairProduct(detailProduct) ? "Choose closure size" : hasTypes ? "Choose a type" : "Choose an option";
@@ -622,7 +684,7 @@
     $("#detail-variants").innerHTML = variants.map(option => `<button type="button" class="detail-size ${option === detailVariant ? "selected" : ""}" data-detail-variant="${escapeAttr(option)}" aria-pressed="${option === detailVariant}">${escapeHtml(option)}</button>`).join("");
     const missingChoice = !cartSelectionIsValid(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     const unavailable = detailProduct.availability === "out_of_stock";
-    $("#detail-price").innerHTML = priceMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant }, "", true);
+    $("#detail-price").innerHTML = productPurchaseMarkup(detailProduct, { color: detailColor, size: detailSize, variant: detailVariant });
     $("#detail-add").disabled = unavailable || missingChoice;
     $("#detail-purchase-status").textContent = missingChoice && !unavailable ? "Choose the available options to continue." : $("#detail-availability").textContent;
   }
@@ -644,7 +706,7 @@
     const availability = product.availability === "preorder" ? "Available for pre-order" : product.availability === "out_of_stock" ? "Currently out of stock" : inStockLabel(product);
     $("#detail-availability").textContent = availability;
     $("#detail-availability").className = `detail-availability ${product.availability === "preorder" ? "preorder" : product.availability === "out_of_stock" ? "out-of-stock" : "in-stock"}`;
-    $("#detail-price").innerHTML = priceMarkup(product, {}, "", true);
+    $("#detail-price").innerHTML = productPurchaseMarkup(product);
     $("#detail-purchase-status").textContent = availability;
     $("#detail-add").disabled = product.availability === "out_of_stock";
     $("#detail-add").innerHTML = product.availability === "out_of_stock" ? "Out of stock" : 'Add to bag <span>↗</span>';
@@ -703,6 +765,7 @@
   let pendingVariantProduct = null;
   function fillVariantSelect(select, values, label) {
     select.required = values.length > 0;
+    syncRequiredFields();
     select.innerHTML = `<option value="">Choose ${label.toLowerCase()}</option>${values.map(value => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("")}`;
   }
   function openVariantPicker(product) {
@@ -758,6 +821,12 @@
     closeVariantPicker();
   });
   document.addEventListener("click", e => {
+    const pageButton = e.target.closest("[data-product-page]");
+    if (pageButton && !pageButton.disabled) {
+      productPage = Number(pageButton.dataset.productPage); renderProducts(); writeCatalogUrl(true);
+      $("#shop")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      $("#product-result-count")?.focus({ preventScroll: true }); return;
+    }
     const detail = e.target.closest("[data-detail]"); if (detail) { const product = products.find(p => p.id === detail.dataset.detail); if (product) openProductDetail(product); return; }
     const add = e.target.closest("[data-add]"); if (add) { const product = products.find(p => p.id === add.dataset.add); if (!product || product.availability === "out_of_stock") return; if (product.colors?.length || product.sizes?.length || productVariantOptions(product).length) openVariantPicker(product); else addProductToCart(product); }
     const filter = e.target.closest("[data-category]");
@@ -1307,7 +1376,7 @@
     orderStatus.textContent = "";
     try {
       const { data, error } = await supabaseClient.functions.invoke("customer-cancel-order", {
-        body: { orderNumber, appsScriptEndpoint: window.TRikonicOrderEndpoint || "" }
+        body: { orderNumber }
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || "We couldn’t cancel this order. Please try again.");
@@ -1331,6 +1400,7 @@
     if (passwordField) passwordField.hidden = recovery;
     const passwordInput = $("#account-form [name=password]");
     passwordInput.required = !recovery;
+    if (nameField) nameField.querySelector("input").required = signup;
     passwordInput.autocomplete = updatePassword ? "new-password" : "current-password";
     if (passwordField?.firstChild) passwordField.firstChild.textContent = updatePassword ? "New password" : "Password";
     $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : recovery ? "Reset your <em>password.</em>" : updatePassword ? "Choose a <em>new password.</em>" : "Welcome to <em>Trikonic.</em>";
@@ -1342,6 +1412,7 @@
     $("#account-form").dataset.mode = mode;
     $("#account-status").textContent = "";
     $("#account-status").classList.remove("account-error");
+    syncRequiredFields();
   }
   const accountPopover = $("#account-popover");
   function setAccountPopover(open) {
@@ -1547,7 +1618,6 @@
     }
     const { shipping, total } = orderTotals(items);
     const order = { orderId: `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: new Date().toISOString(), customer: { name: form.get("name"), contact: form.get("contact"), location: form.get("location"), notes: form.get("notes") }, items, shippingTotal: items.some(item => item.shippingTotal != null) ? shipping : null, estimatedTotal: total, currency: "GHS" };
-    const endpoint = window.TRikonicOrderEndpoint || "";
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
     try {
       const { data: created, error: saveError } = await supabaseClient.functions.invoke("create-order", { body: {
@@ -1565,15 +1635,7 @@
       savedReceiptOrder = order;
       $("#success-order-id").textContent = `Order ID: ${order.orderId}`;
       renderCheckoutReceipt(order.items, "#success-receipt-items", "#success-receipt-total");
-      let sheetQueued = true;
-      if (endpoint) {
-        // Apps Script ContentService redirects its response to googleusercontent.com,
-        // which can make a cross-origin fetch look like a failure after the row was
-        // written. sendBeacon queues the same JSON POST without needing to read that
-        // cross-origin response. Apps Script still receives it as e.postData.contents.
-        sheetQueued = navigator.sendBeacon(endpoint, new Blob([JSON.stringify(order)], { type: "text/plain;charset=utf-8" }));
-      }
-      $("#success-message").textContent = sheetQueued ? "Your order is saved. Opening secure Paystack payment now. We’ll email your tracking number after payment; SMS is sent when notifications are enabled." : "Your order is saved in your account, but the order sheet could not be reached. Opening secure Paystack payment now; you can still track it in your account.";
+      $("#success-message").textContent = "Your order has been saved. Continue to secure payment to confirm it.";
       $("#checkout-form-view").hidden = true; $("#checkout-success-view").hidden = false;
       keys.forEach(key => cart.delete(key)); saveCart(); renderCart(); $("#order-form").reset();
       setTimeout(loadOrderHistory, 0);
@@ -1581,6 +1643,7 @@
     } catch (err) { status.textContent = err.message || "We couldn’t save that just now. Please try again."; }
     finally { submit.disabled = false; submit.innerHTML = 'Continue to payment <span>↗</span>'; }
   });
+  syncRequiredFields();
   renderCategories(); renderProducts(); renderCart();
   const heroControls = $(".hero-controls");
   if (heroControls) {

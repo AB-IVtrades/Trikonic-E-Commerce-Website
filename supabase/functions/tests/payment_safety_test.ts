@@ -93,6 +93,9 @@ Deno.test("verification rejects mismatches, pending and failed never mark paid, 
   let transaction: any = { ...tx }, saved: any = { ...order }, paidWrites = 0;
   globalThis.fetch = async (input, init: any) => {
     const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
+      return Response.json(true);
+    }
     if (url.hostname === "api.paystack.co") {
       return Response.json({ status: true, data: transaction });
     }
@@ -163,6 +166,9 @@ Deno.test("callback endpoint authenticates, scopes reference to owner and return
   let owned = true, status = "pending", paidWrites = 0;
   globalThis.fetch = async (input, init: any) => {
     const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
+      return Response.json(true);
+    }
     if (url.pathname === "/auth/v1/user") {
       return Response.json({
         id: "user-1",
@@ -232,6 +238,9 @@ Deno.test("checkout uses confirmed customer and trusted catalog rather than clie
   let inserted: any, maintenance = false;
   globalThis.fetch = async (input, init: any) => {
     const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
+      return Response.json(true);
+    }
     if (url.pathname === "/auth/v1/user") {
       return Response.json({
         id: "user-1",
@@ -300,8 +309,12 @@ Deno.test("payment initialization uses saved amount, reserves before Paystack an
     handler = h;
   }) as typeof Deno.serve;
   let active: any, initialized = 0, mode = "normal";
+  Deno.env.set("ORDER_STATUS_SYNC_TOKEN", "test-sync-token");
   globalThis.fetch = async (input, init: any) => {
     const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
+      return Response.json(true);
+    }
     if (url.pathname === "/auth/v1/user") {
       return Response.json({
         id: "user-1",
@@ -335,6 +348,9 @@ Deno.test("payment initialization uses saved amount, reserves before Paystack an
         return Response.json({});
       }
       return Response.json(active ? [active] : []);
+    }
+    if (url.hostname === "script.google.com") {
+      return Response.json({ ok: true });
     }
     if (url.pathname === "/transaction/initialize") {
       const body = JSON.parse(init.body);

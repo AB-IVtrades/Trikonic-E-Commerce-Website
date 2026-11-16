@@ -16,6 +16,7 @@ export const json = (body: unknown, status = 200) =>
       ...cors,
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
+      ...(status === 429 ? { "Retry-After": "60" } : {}),
     },
   });
 export function environment() {
@@ -78,4 +79,45 @@ export async function rows(path: string, params: Record<string, string> = {}) {
     throw new RequestError("Could not load your order. Please retry.", 503);
   }
   return await response.json();
+}
+
+export async function readJson(
+  request: Request,
+  maxBytes = 65536,
+): Promise<Record<string, any>> {
+  if (Number(request.headers.get("content-length") || 0) > maxBytes) {
+    throw new RequestError("Request is too large.", 413);
+  }
+  const reader = request.body?.getReader();
+  if (!reader) throw new RequestError("Invalid request.");
+  const parts: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.length;
+      if (bytes > maxBytes) {
+        await reader.cancel();
+        throw new RequestError("Request is too large.", 413);
+      }
+      parts.push(value);
+    }
+    const body = new Uint8Array(bytes);
+    let offset = 0;
+    for (const part of parts) {
+      body.set(part, offset);
+      offset += part.length;
+    }
+    const value = JSON.parse(new TextDecoder().decode(body));
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Invalid object");
+    }
+    return value;
+  } catch (error) {
+    if (error instanceof RequestError) throw error;
+    throw new RequestError("Invalid request.");
+  } finally {
+    reader.releaseLock();
+  }
 }

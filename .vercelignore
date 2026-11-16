@@ -7,3 +7,10 @@ README.md
 *.mp4
 
 *.gs
+
+.github
+.env*
+*.pem
+*.key
+*.log
+AGENTS.md

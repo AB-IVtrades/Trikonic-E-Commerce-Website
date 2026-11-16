@@ -34,6 +34,8 @@ const $ = name => { if (!elements.has(name)) elements.set(name, { textContent: '
 const context = vm.createContext({ $, products: [], cart: new Map(), money: n => `GHS ${Number(n).toFixed(2)}`, escapeHtml: String, escapeAttr: String, swatchFor: () => '#000', swatchMarkFor: () => '#fff', productGallery: () => ({ colorPhotos: new Map(), typePhotos: new Map() }), resolveProductImage: String });
 vm.runInContext(app.slice(app.indexOf('  function parseCartKey('), app.indexOf('  function saveCart(')), context);
 vm.runInContext(app.slice(app.indexOf('  function selectionPhoto('), app.indexOf('  function resolveProductImage(')), context);
+vm.runInContext(app.slice(app.indexOf('  function shippingMarkup('), app.indexOf('  function productCardMarkup(')), context);
+context.syncRequiredFields = () => {};
 vm.runInContext(app.slice(app.indexOf('  function renderDetailOptions('), app.indexOf('  function openProductDetail(')), context);
 for (const product of [catalog(), catalog(true)]) {
   for (const [size, variant, expected] of [['12 inches', '2 x 4', 250], ['12 inches', '4 x 4', 300], ['14 inches', '2 x 4', 320], ['14 inches', '4 x 4', 350]]) {
@@ -53,9 +55,9 @@ for (const product of [catalog(), catalog(true)]) {
   assert(context.optionDescriptions(item).includes('Closure Size: 4 x 4'));
   context.detailProduct = product; context.detailColor = 'Black'; context.detailSize = '14 inches'; context.detailVariant = '4 x 4';
   context.renderDetailOptions();
-  assert.equal($('#detail-size-group strong').textContent, 'Hair Length');
-  assert.equal($('#detail-variant-group strong').textContent, 'Closure Size');
-  assert($('#detail-price').innerHTML.includes('400.00'));
+  assert.equal($('#detail-size-group strong').textContent, 'Hair Length *');
+  assert.equal($('#detail-variant-group strong').textContent, 'Closure Size *');
+  assert($('#detail-price').innerHTML.includes('350.00') && $('#detail-price').innerHTML.includes('Shipping: GHS 50.00'));
   context.detailSize = ''; context.detailVariant = ''; context.renderDetailOptions();
   assert.equal($('#detail-add').disabled, true);
 }
@@ -74,8 +76,8 @@ context.openVariantPicker(shoes);
 assert.equal($('#variant-size-field').firstChild.textContent, 'Size');
 assert.equal($('#variant-option-field').firstChild.textContent, 'Option');
 context.detailProduct = shoes; context.detailSize = '42'; context.detailVariant = ''; context.renderDetailOptions();
-assert.equal($('#detail-size-group strong').textContent, 'Size');
-assert.equal($('#detail-variant-group strong').textContent, 'Option');
+assert.equal($('#detail-size-group strong').textContent, 'Size *');
+assert.equal($('#detail-variant-group strong').textContent, 'Option *');
 const fallback = { ...catalog(), variantPrices: [] };
 assert.equal(context.regularPriceFor(fallback, { size: '14 inches', variant: '4 x 4' }), 200);
 console.log('Hair options passed: live catalog parser, GHS/USD combinations, aliases, shipping, sale pricing, saved orders, labels, required choices and other categories.');

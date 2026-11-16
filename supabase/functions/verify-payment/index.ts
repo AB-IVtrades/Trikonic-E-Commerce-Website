@@ -1,8 +1,10 @@
+import { rateLimit } from "../_shared/limits.ts";
 import {
   cors,
   customer,
   failure,
   json,
+  readJson,
   RequestError,
 } from "../_shared/server.ts";
 import { orderForReference, verifyAndRecord } from "../_shared/payments.ts";
@@ -15,7 +17,8 @@ Deno.serve(async (request) => {
   }
   try {
     const { user } = await customer(request);
-    const { reference } = await request.json();
+    await rateLimit("verify-payment", user.id, 60, 60);
+    const { reference } = await readJson(request);
     if (
       typeof reference !== "string" || !/^[A-Za-z0-9-]{8,120}$/.test(reference)
     ) throw new RequestError("Missing or invalid payment reference.");

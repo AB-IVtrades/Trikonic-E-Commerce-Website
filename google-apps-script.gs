@@ -150,6 +150,11 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents);
     if (payload.action === "cancelOrder") return cancelOrderInSheet(payload);
     if (payload.action === "paymentMade") return markPaymentMadeInSheet(payload);
+    // Only the verified server checkout may write order rows.
+    const expectedToken = PropertiesService.getScriptProperties().getProperty(STATUS_SYNC_PROPERTY) || "";
+    if (!expectedToken || !payload.token || payload.token !== expectedToken) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: "Unauthorized" })).setMimeType(ContentService.MimeType.JSON);
+    }
     const order = payload;
     const sheet = getTrikonicSpreadsheet_().getSheetByName(SHEET_NAME)
       || getTrikonicSpreadsheet_().insertSheet(SHEET_NAME);
@@ -171,7 +176,14 @@ function doPost(e) {
       while (orderRow.length < shippingColumn) orderRow.push("");
       orderRow[shippingColumn - 1] = order.shippingTotal;
     }
-    sheet.appendRow(orderRow);
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const ids = sheet.getLastRow() > 1 ? sheet.getRange(2, 3, sheet.getLastRow() - 1, 1).getDisplayValues().flat() : [];
+      if (ids.some(value => String(value) === String(order.orderId))) return ContentService.createTextOutput(JSON.stringify({ ok: true, unchanged: true })).setMimeType(ContentService.MimeType.JSON);
+      // Text beginning with a spreadsheet formula marker must stay literal text.
+      sheet.appendRow(orderRow.map(value => typeof value === "string" && /^[\s]*[=+@-]/.test(value) ? "'" + value : value));
+    } finally { lock.releaseLock(); }
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(error) })).setMimeType(ContentService.MimeType.JSON);

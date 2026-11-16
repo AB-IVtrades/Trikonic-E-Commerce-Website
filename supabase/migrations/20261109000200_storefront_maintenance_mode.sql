@@ -21,5 +21,5 @@ create policy "Anyone can read storefront maintenance setting"
 drop policy if exists "Only store admin can update maintenance setting" on public.site_settings;
 create policy "Only store admin can update maintenance setting"
   on public.site_settings for update to authenticated
-  using (lower(coalesce((select auth.jwt() ->> 'email'), '')) = 'nkab200321@gmail.com')
-  with check (lower(coalesce((select auth.jwt() ->> 'email'), '')) = 'nkab200321@gmail.com');
+  using ((select auth.uid()) is not null and nullif(current_setting('app.store_admin_email', true), '') is not null and lower(coalesce((select auth.jwt() ->> 'email'), '')) = lower(coalesce(current_setting('app.store_admin_email', true), '')))
+  with check ((select auth.uid()) is not null and nullif(current_setting('app.store_admin_email', true), '') is not null and lower(coalesce((select auth.jwt() ->> 'email'), '')) = lower(coalesce(current_setting('app.store_admin_email', true), '')));

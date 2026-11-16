@@ -1,3 +1,5 @@
+import { readJson, RequestError } from "../_shared/server.ts";
+import { rateLimit } from "../_shared/limits.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   receiptColumns,
@@ -37,7 +39,8 @@ Deno.serve(async (request) => {
     if (!auth.ok) return json("Please sign in again.", 401);
     const user = await auth.json();
     if (!user.id) return json("Could not verify your account.", 401);
-    const { orderNumber } = await request.json().catch(() => ({}));
+    await rateLimit("receipt", user.id, 20, 60);
+    const { orderNumber } = await readJson(request, 4096);
     if (
       typeof orderNumber !== "string" ||
       !/^TRK-[0-9]{13}-[A-Z0-9]{4}$/.test(orderNumber)
@@ -71,6 +74,11 @@ Deno.serve(async (request) => {
     });
   } catch (error) {
     console.error("Receipt download failed", error);
-    return json("Could not prepare your receipt. Please try again.", 503);
+    return json(
+      error instanceof RequestError
+        ? error.message
+        : "Could not prepare your receipt. Please try again.",
+      error instanceof RequestError ? error.status : 503,
+    );
   }
 });
