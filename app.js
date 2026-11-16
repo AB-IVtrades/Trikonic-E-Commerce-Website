@@ -666,6 +666,15 @@
     const luminance = .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
     return luminance < .38 ? "#ffffff" : "#0b2f4d";
   }
+  function resetDetailChoicePrompt() {
+    clearTimeout(resetDetailChoicePrompt.timer);
+    resetDetailChoicePrompt.token = (resetDetailChoicePrompt.token || 0) + 1;
+    ["#detail-color-group", "#detail-size-group", "#detail-variant-group"].forEach(selector => {
+      const group = $(selector);
+      group.getAnimations?.().forEach(animation => animation.cancel());
+      group.classList.remove("choice-required");
+    });
+  }
   function missingDetailChoices() {
     const matches = (options, value) => !options?.length || options.some(option => normalizeVariantOption(option) === normalizeVariantOption(value));
     return [
@@ -675,6 +684,8 @@
     ].filter(([, options, value]) => !matches(options, value));
   }
   function promptDetailChoices() {
+    resetDetailChoicePrompt();
+    const token = resetDetailChoicePrompt.token;
     const missing = missingDetailChoices();
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     $("#detail-purchase-status").textContent = `Please choose ${missing.map(choice => choice[3]).join(" and ")} before adding to your bag.`;
@@ -686,11 +697,15 @@
         group.animate([{transform:"translateX(0)"},{transform:"translateX(-5px)"},{transform:"translateX(5px)"},{transform:"translateX(-3px)"},{transform:"translateX(3px)"},{transform:"translateX(0)"}], {duration:360,easing:"ease-in-out"});
       }
     });
+    resetDetailChoicePrompt.timer = setTimeout(() => {
+      if (token === resetDetailChoicePrompt.token) resetDetailChoicePrompt();
+    }, 360);
     const first = missing.length && $(missing[0][0]);
     if (first) { first.scrollIntoView({behavior:reduced?"instant":"smooth",block:"center"}); first.querySelector("button")?.focus({preventScroll:true}); }
   }
   function renderDetailOptions() {
     if (!detailProduct) return;
+    resetDetailChoicePrompt();
     $("#detail-color-group").hidden = !detailProduct.colors?.length;
     $("#detail-size-group").hidden = !detailProduct.sizes?.length;
     const variants = productVariantOptions(detailProduct);
@@ -715,6 +730,7 @@
     $("#detail-purchase-status").textContent = missingChoice && !unavailable ? "Choose the available options to continue." : $("#detail-availability").textContent;
   }
   function openProductDetail(product) {
+    resetDetailChoicePrompt();
     if (!detailProduct) detailPageScrollY = window.scrollY;
     detailProduct = product;
     detailColor = "";
@@ -747,6 +763,7 @@
     detailBackdrop.querySelector(".product-detail-modal").scrollTop = 0;
   }
   function closeProductDetail() {
+    resetDetailChoicePrompt();
     if (!detailProduct) return;
     detailBackdrop.classList.remove("show");
     detailBackdrop.setAttribute("aria-hidden", "true");
