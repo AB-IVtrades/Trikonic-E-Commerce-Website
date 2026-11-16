@@ -1,5 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { receiptColumns, receiptFilename, receiptHtml, savedReceiptPdf, toBase64 } from "../_shared/receipt.ts";
+import { receiptFilename, receiptHtml, savedReceiptPdf, toBase64 } from "../_shared/receipt.ts";
+
+import { orderForReference, verifyAndRecord } from "../_shared/payments.ts";
+import { RequestError } from "../_shared/server.ts";
 
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const encoder = new TextEncoder();
@@ -74,39 +77,17 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   if (!serviceKey) return reply({ error: "Payment webhook is not configured" }, 503);
   const apiHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
-  const lookup = new URL(`${supabaseUrl}/rest/v1/orders`);
-  lookup.searchParams.set("payment_reference", `eq.${reference}`);
-  lookup.searchParams.set("select", `${receiptColumns},user_id,status,email_notified_at,sms_notified_at`);
-  const foundResponse = await fetch(lookup, { headers: apiHeaders });
-  if (!foundResponse.ok) return reply({ error: "Could not load payment order" }, 503);
-  const orders = await foundResponse.json();
-  const order = orders[0];
-  if (!order) return reply({ received: true });
-
-  // Verify transaction with Paystack and compare its amount and currency with
-  // the server-side order before recording payment.
-  const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, { headers: { Authorization: `Bearer ${paystackKey}` } });
-  const verified = await verifyResponse.json();
-  const expectedAmount = Math.round(Number(order.estimated_total) * 100);
-  if (!verifyResponse.ok || !verified.status || verified.data?.status !== "success" || verified.data?.currency !== order.currency || Number(verified.data?.amount) !== expectedAmount || verified.data?.reference !== reference) {
-    console.error("Paystack verification mismatch", reference);
-    return reply({ error: "Payment verification failed" }, 400);
-  }
-  if (!["pending", "paid"].includes(order.payment_status)) return reply({ received: true });
-  if (order.payment_status !== "paid") {
-    const paidAt = verified.data.paid_at || new Date().toISOString();
-    const patchUrl = new URL(`${supabaseUrl}/rest/v1/orders`);
-    patchUrl.searchParams.set("id", `eq.${order.id}`);
-    patchUrl.searchParams.set("payment_status", "eq.pending");
-    const patchResponse = await fetch(patchUrl, {
-      method: "PATCH",
-      headers: { ...apiHeaders, Prefer: "return=representation" },
-      body: JSON.stringify({ payment_status: "paid", payment_paid_at: paidAt, status: order.status === "Order Received" ? "Payment Made" : order.status }),
-    });
-    if (!patchResponse.ok) return reply({ error: "Could not record payment" }, 503);
-    const [saved] = await patchResponse.json();
-    if (!saved) return reply({ error: "Order payment changed; retry verification" }, 503);
-    Object.assign(order, saved);
+  let order;
+  try {
+    const record = await orderForReference(reference);
+    if (!record) return reply({ received: true });
+    if (!["pending", "paid"].includes(record.order.payment_status)) return reply({ received: true });
+    const verified = await verifyAndRecord(reference, record);
+    if (verified.state !== "success") return reply({ error: "Payment is not yet confirmed; verification will retry" }, 503);
+    order = verified.order;
+  } catch (error) {
+    console.error("Payment verification failed", error instanceof Error ? error.message : "Unknown error");
+    return reply({ error: "Payment could not be verified" }, error instanceof RequestError ? error.status : 503);
   }
 
   // Keep the Sheet aligned with the verified payment. Apps Script treats this

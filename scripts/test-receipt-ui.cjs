@@ -13,7 +13,7 @@ const context = vm.createContext({
     { order_number: 'TRK-1794816000000-PEND', payment_status: 'pending', status: 'Order Received', items: [], created_at: '2026-11-16', estimated_total: 25 },
     { order_number: 'TRK-1794816000000-DONE', payment_status: 'paid', status: 'Order Delivered', items: [], created_at: '2026-11-16', estimated_total: 50 }
   ],
-  orderView: 'tracking', trackedOrder: 'TRK-1794816000000-PAID',
+  returnedOrderNumber: '', orderView: 'tracking', trackedOrder: 'TRK-1794816000000-PAID',
   escapeHtml: String, escapeAttr: String, money: n => `GHS ${n}`,
   supabaseConfig: { url: 'https://backend.test', publishableKey: 'public' },
   supabaseClient: { auth: { getSession: async () => ({ data: { session: { access_token: 'customer-token' } } }) } },

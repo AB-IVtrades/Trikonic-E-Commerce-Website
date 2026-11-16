@@ -1,73 +1,236 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
-const allowedOrigins = new Set(["https://trikonicimports.com", "https://www.trikonicimports.com"]);
-function corsHeaders(origin: string | null) {
-  const headers = new Headers({ "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS", "Vary": "Origin", "Content-Type": "application/json" });
-  if (origin && allowedOrigins.has(origin)) headers.set("Access-Control-Allow-Origin", origin);
-  return headers;
-}
-const json = (body: unknown, status = 200, origin: string | null = null) => new Response(JSON.stringify(body), { status, headers: corsHeaders(origin) });
-
-Deno.serve(async (req) => {
-  const origin = req.headers.get("Origin");
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
-  if (origin && !allowedOrigins.has(origin)) return json({ error: "Origin not allowed" }, 403, origin);
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, origin);
-  const auth = req.headers.get("Authorization") || "";
-  if (!auth.startsWith("Bearer ")) return json({ error: "Sign in to pay for this order." }, 401, origin);
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  const paystackKey = Deno.env.get("PAYSTACK_SECRET_KEY") || "";
-  if (!paystackKey || !serviceKey) return json({ error: "Online payment is being set up. Please try again shortly." }, 503, origin);
-
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: auth } });
-  if (!userResponse.ok) return json({ error: "Your session has expired. Sign in and try again." }, 401, origin);
-  const user = await userResponse.json();
-  let body: { orderNumber?: string };
-  try { body = await req.json(); } catch { return json({ error: "Invalid request." }, 400, origin); }
-  const orderNumber = String(body.orderNumber || "").trim();
-  if (!orderNumber || !user.email) return json({ error: "Order or account email is missing." }, 400, origin);
-
-  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
-  const orderUrl = new URL(`${supabaseUrl}/rest/v1/orders`);
-  orderUrl.searchParams.set("order_number", `eq.${orderNumber}`);
-  orderUrl.searchParams.set("user_id", `eq.${user.id}`);
-  orderUrl.searchParams.set("select", "id,order_number,estimated_total,currency,status,payment_status");
-  const orderResponse = await fetch(orderUrl, { headers });
-  const rows = orderResponse.ok ? await orderResponse.json() : [];
-  const order = rows[0];
-  if (!order) return json({ error: "We couldn't find that order in your account." }, 404, origin);
-  if (order.status === "Order Cancelled") return json({ error: "Cancelled orders cannot be paid." }, 409, origin);
-  if (order.payment_status === "paid") return json({ error: "This order is already paid." }, 409, origin);
-  const amount = Math.round(Number(order.estimated_total) * 100);
-  if (!Number.isSafeInteger(amount) || amount < 1 || order.currency !== "GHS") return json({ error: "This order has an invalid payment amount." }, 400, origin);
-
-  const reference = `TRK-${crypto.randomUUID()}`;
-  const callback = "https://trikonicimports.com/?payment=return#home";
-  const initResponse = await fetch("https://api.paystack.co/transaction/initialize", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${paystackKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: user.email,
-      amount,
-      currency: "GHS",
-      reference,
-      callback_url: callback,
-      metadata: { order_number: order.order_number, order_id: order.id, user_id: user.id },
-    }),
-  });
-  const initialized = await initResponse.json();
-  if (!initResponse.ok || !initialized.status || !initialized.data?.authorization_url) {
-    console.error("Paystack initialization failed", initialized.message || initResponse.status);
-    return json({ error: "We couldn't start payment. Please retry from your account." }, 502, origin);
+import {
+  cors,
+  customer,
+  failure,
+  json,
+  RequestError,
+  rows,
+} from "../_shared/server.ts";
+import { assertTrustedPricing } from "../_shared/catalog.ts";
+import { verifyAndRecord } from "../_shared/payments.ts";
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") {
+    return new Response("ok", { headers: cors });
   }
-  const updateUrl = new URL(`${supabaseUrl}/rest/v1/orders`);
-  updateUrl.searchParams.set("id", `eq.${order.id}`);
-  const update = await fetch(updateUrl, { method: "PATCH", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify({ payment_reference: reference, payment_status: "pending" }) });
-  if (!update.ok) {
-    console.error("Could not save payment reference", await update.text());
-    return json({ error: "Payment setup did not finish. Please try again." }, 502, origin);
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
   }
-  return json({ authorizationUrl: initialized.data.authorization_url }, 200, origin);
+  let reservedReference = "";
+  try {
+    const { user, env } = await customer(request);
+    const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+    if (!secret) {
+      throw new RequestError("Online payment is temporarily unavailable.", 503);
+    }
+    const { orderNumber } = await request.json();
+    if (
+      typeof orderNumber !== "string" ||
+      !/^TRK-[0-9]{13}-[A-Z0-9]{4}$/.test(orderNumber)
+    ) throw new RequestError("Invalid order number.");
+    const [order] = await rows("orders", {
+      order_number: `eq.${orderNumber}`,
+      user_id: `eq.${user.id}`,
+      select: "*",
+    });
+    if (!order) throw new RequestError("Order not found in your account.", 404);
+    if (
+      order.payment_status !== "pending" || order.status === "Order Cancelled"
+    ) {
+      throw new RequestError(
+        order.payment_status === "paid"
+          ? "This order is already paid."
+          : "This order cannot be paid.",
+        409,
+      );
+    }
+    await assertTrustedPricing(order);
+    const [active] = await rows("payment_attempts", {
+      order_id: `eq.${order.id}`,
+      state: "in.(initializing,ready)",
+      select: "*",
+    });
+    if (active?.authorization_url && active.state === "ready") {
+      const checked = await verifyAndRecord(active.reference, {
+        order,
+        attempt: active,
+      });
+      if (checked.state === "success") {
+        throw new RequestError(
+          "This order is already paid. Open your account to view its receipt.",
+          409,
+        );
+      }
+      if (checked.state === "pending") {
+        return json({ authorizationUrl: active.authorization_url });
+      }
+    }
+    if (active && active.state === "initializing") {
+      if (Date.now() - Date.parse(active.created_at) < 120000) {
+        throw new RequestError(
+          "A payment is being prepared. Wait a moment and try again.",
+          409,
+        );
+      }
+      const expired = await fetch(
+        `${env.url}/rest/v1/payment_attempts?reference=eq.${
+          encodeURIComponent(active.reference)
+        }&state=eq.initializing`,
+        {
+          method: "PATCH",
+          headers: env.headers,
+          body: JSON.stringify({ state: "failed" }),
+        },
+      );
+      if (!expired.ok) {
+        throw new RequestError(
+          "Could not retry payment. Please try again.",
+          503,
+        );
+      }
+    }
+    const amount = Math.round(Number(order.estimated_total) * 100);
+    if (
+      !Number.isSafeInteger(amount) || amount < 1 || order.currency !== "GHS"
+    ) throw new RequestError("Invalid order total.");
+    // Preserve a reference issued by the old checkout so its webhook still resolves.
+    if (order.payment_reference) {
+      const old = await rows("payment_attempts", {
+        reference: `eq.${order.payment_reference}`,
+        select: "reference",
+      });
+      if (!old.length) {
+        const legacy = await fetch(`${env.url}/rest/v1/payment_attempts`, {
+          method: "POST",
+          headers: env.headers,
+          body: JSON.stringify({
+            reference: order.payment_reference,
+            order_id: order.id,
+            amount,
+            currency: "GHS",
+            state: "failed",
+          }),
+        });
+        if (!legacy.ok && legacy.status !== 409) {
+          throw new RequestError(
+            "Could not prepare payment. Please retry.",
+            503,
+          );
+        }
+      }
+    }
+    const reference = `TRK-${crypto.randomUUID()}`;
+    const reserved = await fetch(`${env.url}/rest/v1/payment_attempts`, {
+      method: "POST",
+      headers: env.headers,
+      body: JSON.stringify({
+        reference,
+        order_id: order.id,
+        amount,
+        currency: "GHS",
+      }),
+    });
+    if (!reserved.ok) {
+      throw new RequestError(
+        "Another payment is being prepared. Please refresh your order and retry.",
+        409,
+      );
+    }
+    reservedReference = reference;
+    const initialized = await fetch(
+      "https://api.paystack.co/transaction/initialize",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "Content-Type": "application/json",
+        },
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({
+          email: user.email,
+          amount,
+          currency: "GHS",
+          reference,
+          callback_url: "https://trikonicimports.com/?payment=return#home",
+          metadata: {
+            order_number: order.order_number,
+            order_id: order.id,
+            user_id: user.id,
+          },
+        }),
+      },
+    );
+    const data = await initialized.json();
+    let authorization: URL;
+    try {
+      authorization = new URL(data.data?.authorization_url);
+    } catch {
+      authorization = new URL("https://invalid.local");
+    }
+    if (
+      !initialized.ok || data.status !== true ||
+      authorization.protocol !== "https:" ||
+      authorization.hostname !== "checkout.paystack.com" ||
+      data.data?.reference !== reference
+    ) {
+      await fetch(
+        `${env.url}/rest/v1/payment_attempts?reference=eq.${reference}`,
+        {
+          method: "PATCH",
+          headers: env.headers,
+          body: JSON.stringify({ state: "failed" }),
+        },
+      );
+      throw new RequestError("Could not start payment. Please try again.", 502);
+    }
+    const saved = await fetch(
+      `${env.url}/rest/v1/payment_attempts?reference=eq.${reference}`,
+      {
+        method: "PATCH",
+        headers: env.headers,
+        body: JSON.stringify({
+          state: "ready",
+          authorization_url: authorization.href,
+        }),
+      },
+    );
+    if (!saved.ok) {
+      throw new RequestError(
+        "Could not save the payment link. Please retry.",
+        503,
+      );
+    }
+    const current = await fetch(
+      `${env.url}/rest/v1/orders?id=eq.${order.id}&payment_status=eq.pending`,
+      {
+        method: "PATCH",
+        headers: env.headers,
+        body: JSON.stringify({ payment_reference: reference }),
+      },
+    );
+    if (!current.ok) {
+      throw new RequestError(
+        "Could not save the payment reference. Please retry.",
+        503,
+      );
+    }
+    return json({ authorizationUrl: authorization.href });
+  } catch (error) {
+    if (reservedReference) {
+      try {
+        const { environment } = await import("../_shared/server.ts");
+        const env = environment();
+        await fetch(
+          `${env.url}/rest/v1/payment_attempts?reference=eq.${reservedReference}&state=eq.initializing`,
+          {
+            method: "PATCH",
+            headers: env.headers,
+            body: JSON.stringify({ state: "failed" }),
+          },
+        );
+      } catch {
+        /* An interrupted reservation can be retried after its short expiry. */
+      }
+    }
+    return failure(error);
+  }
 });

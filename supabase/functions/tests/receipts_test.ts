@@ -246,12 +246,14 @@ Deno.test("webhook verifies payment then sends branded email and the saved PDF o
       payment_status: "pending",
       email_notified_at: null,
       status: "Order Received",
+      pricing_verified_at: "2026-11-16T00:00:00Z",
     },
     emails = 0,
     amount = 85000,
     attachment = "";
   globalThis.fetch = async (input: string | URL | Request, init?: any) => {
     const url = String(input);
+    if (url.includes("/rest/v1/payment_attempts")) return Response.json([]);
     if (url.includes("/rest/v1/orders")) {
       if (init?.method === "PATCH") {
         Object.assign(order, JSON.parse(String(init.body)));
@@ -318,7 +320,7 @@ Deno.test("webhook verifies payment then sends branded email and the saved PDF o
     assert((await handler!(request("invalid"))).status === 401 && emails === 0);
     amount = 1;
     assert(
-      (await handler!(request())).status === 400 && emails === 0 &&
+      (await handler!(request())).status === 409 && emails === 0 &&
         order.payment_status === "pending",
     );
     amount = 85000;

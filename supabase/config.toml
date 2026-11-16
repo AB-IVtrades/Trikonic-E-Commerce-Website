@@ -12,3 +12,9 @@ verify_jwt = false
 
 [functions.customer-receipt]
 verify_jwt = true
+
+[functions.create-order]
+verify_jwt = true
+
+[functions.verify-payment]
+verify_jwt = true

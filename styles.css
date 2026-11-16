@@ -716,3 +716,5 @@ body.profile-photo-open { position: fixed; top: var(--photo-page-top); left: 0; 
 }
 
 .paid-receipt-button{border:0;background:#ff710f;color:#0b3154;padding:12px 16px;font:600 12px var(--sans);cursor:pointer;margin:0 12px 12px 0}.paid-receipt-button:disabled{opacity:.65;cursor:wait}.paid-receipt-button:focus-visible{outline:2px solid #0b3154;outline-offset:3px}
+
+.payment-return-notice{position:fixed;z-index:500;left:50%;bottom:24px;transform:translateX(-50%);width:min(860px,calc(100% - 32px));display:flex;align-items:center;gap:24px;padding:24px;background:#fff;color:#0b3154;border:2px solid #ff710f;box-shadow:0 8px 32px #0b315433}.payment-return-notice strong{font-size:20px}.payment-return-notice p{font-size:14px;line-height:1.6;margin:8px 0 0}.payment-return-notice button{flex-shrink:0}.payment-return-notice[data-state=error]{border-color:#b64929}@media(max-width:600px){.payment-return-notice{bottom:12px;display:block;padding:18px}.payment-return-notice button{margin-top:14px}}

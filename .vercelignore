@@ -1,0 +1,9 @@
+.git
+supabase
+scripts
+email-templates
+README.md
+*.aiff
+*.mp4
+
+*.gs

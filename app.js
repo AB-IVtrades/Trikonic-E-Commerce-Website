@@ -14,7 +14,67 @@
   let resumeCheckoutAfterAuth = false;
   const trackedOrder = new URLSearchParams(location.search).get("track") || "";
   const paymentReturned = new URLSearchParams(location.search).get("payment") === "return";
-  const adminEmail = String(window.TRikonicAdminEmail || "").trim().toLowerCase();
+  let verifiedAdminUserId = "";
+  let paymentVerificationRunning = false;
+  let paymentVerificationComplete = false;
+  let verifiedPaymentUserId = "";
+  let returnedOrderNumber = "";
+  const returnReference = new URLSearchParams(location.search).get("reference") || new URLSearchParams(location.search).get("trxref") || "";
+  function paymentNotice(title, message, state = "pending") {
+    let notice = $("#payment-return-notice");
+    if (!notice) {
+      notice = document.createElement("section"); notice.id = "payment-return-notice"; notice.className = "payment-return-notice";
+      notice.setAttribute("role", "status"); notice.setAttribute("aria-live", "polite");
+      notice.innerHTML = '<div><strong></strong><p></p></div><button type="button" class="button button-dark" id="payment-return-action">Check payment</button>';
+      document.body.appendChild(notice);
+      notice.querySelector("button").addEventListener("click", () => {
+        if (paymentVerificationComplete) { openAccount("signin", "tracking"); loadOrderHistory(); }
+        else if (!signedInUser) openAccount("signin");
+        else confirmReturnedPayment();
+      });
+    }
+    notice.dataset.state = state;
+    notice.querySelector("strong").textContent = title;
+    notice.querySelector("p").textContent = message;
+    const button = notice.querySelector("button");
+    button.disabled = paymentVerificationRunning;
+    button.textContent = paymentVerificationComplete ? "View order & receipt" : !signedInUser ? "Sign in to verify" : paymentVerificationRunning ? "Checking…" : "Check payment again";
+  }
+  async function confirmReturnedPayment() {
+    if (!paymentReturned || paymentVerificationRunning || paymentVerificationComplete) return;
+    if (!returnReference || !/^[A-Za-z0-9-]{8,120}$/.test(returnReference)) {
+      paymentNotice("Payment reference missing", "We cannot confirm payment from this link. Sign in to check your orders, or contact us.", "error"); return;
+    }
+    if (!signedInUser || !supabaseClient) {
+      paymentNotice("Sign in to verify your payment", "Please sign in to the account used for this order. A return link alone does not confirm payment."); return;
+    }
+    paymentVerificationRunning = true;
+    paymentNotice("Checking your payment", "Please wait while we verify your transaction securely with Paystack.");
+    const userId = signedInUser.id;
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("verify-payment", { body: { reference: returnReference } });
+      if (signedInUser?.id !== userId) return;
+      if (error) {
+        let message = "We could not finish checking your payment. You can check again without paying again.";
+        if (error.context instanceof Response) { const result = await error.context.json().catch(() => ({})); message = result.error || message; }
+        throw new Error(message);
+      }
+      paymentVerificationRunning = false;
+      if (data?.status === "success") {
+        paymentVerificationComplete = true; verifiedPaymentUserId = userId; returnedOrderNumber = data.orderNumber;
+        paymentNotice("Payment successful", `Thank you. Paystack and Trikonic have confirmed ${money(data.amount)} for order ${data.orderNumber}. Your receipt is available in your account.`, "success");
+        const url = new URL(location.href); url.searchParams.delete("reference"); url.searchParams.delete("trxref"); url.searchParams.delete("payment"); history.replaceState(null, "", url.pathname + url.search + url.hash);
+        closeAccount(); await loadOrderHistory();
+      } else if (data?.status === "failed") paymentNotice("Payment was not completed", "Paystack has not confirmed a successful payment. Review your order before trying again.", "error");
+      else paymentNotice("Payment is still processing", "Paystack has not confirmed this payment yet. Wait a moment and check again. You do not need to pay again.");
+    } catch (error) {
+      paymentVerificationRunning = false;
+      paymentNotice("Payment could not be confirmed", error.message || "Please check again or contact us.", "error");
+    } finally {
+      paymentVerificationRunning = false;
+      if (signedInUser?.id !== userId) setTimeout(confirmReturnedPayment, 0);
+    }
+  }
   let manualMaintenance = false;
   let maintenanceLoaded = false;
   let cart = new Map();
@@ -759,7 +819,16 @@
   $("#pay-order-now")?.addEventListener("click", () => startPaystackPayment());
   const accountBackdrop = $("#account-backdrop");
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
-  function isStoreAdmin() { return Boolean(signedInUser?.email && adminEmail && signedInUser.email.trim().toLowerCase() === adminEmail); }
+  function isStoreAdmin() { return Boolean(signedInUser?.id && verifiedAdminUserId === signedInUser.id); }
+  async function refreshAdminAccess() {
+    const userId = signedInUser?.id;
+    verifiedAdminUserId = "";
+    if (!userId || !supabaseClient) { renderMaintenanceMode(); return; }
+    const { data, error } = await supabaseClient.rpc("is_store_admin");
+    if (signedInUser?.id !== userId) return;
+    if (!error && data === true) verifiedAdminUserId = userId;
+    renderMaintenanceMode();
+  }
   function storefrontIsClosed() { return manualMaintenance; }
   const maintenanceControl = $("#admin-maintenance-control");
   const maintenanceStatus = $("#maintenance-status");
@@ -1150,12 +1219,13 @@
       if (data.length < pageSize) break;
     }
     accountOrders = orders;
-    const linkedOrder = trackedOrder && orders.find(order => order.order_number === trackedOrder);
+    const linkedNumber = trackedOrder || returnedOrderNumber;
+    const linkedOrder = linkedNumber && orders.find(order => order.order_number === linkedNumber);
     if (linkedOrder) {
       const linkedStatus = String(linkedOrder.status).trim().toLowerCase().replace(/[ _-]+/g, " ");
       selectOrderView(["order delivered", "order cancelled", "delivered", "cancelled"].includes(linkedStatus) ? "history" : "tracking");
     }
-    status.textContent = paymentReturned ? "Paystack has returned you to Trikonic. Payment status updates after secure verification; refresh shortly if it still says pending." : "";
+    status.textContent = "";
     renderOrders();
   }
 
@@ -1193,7 +1263,7 @@
       const details = lineItems.map(item => `<li><span>${Number(item.quantity) || 0} × ${escapeHtml(item.name || "Item")}${item.color || item.size || item.variant ? `<small class="cart-variant-summary">${optionDescriptions(item).map(escapeHtml).join(" · ")}</small>` : ""}</span><strong>${money(Number(item.lineTotal) || (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></li>`).join("");
       const unpaid = order.payment_status !== "paid" && order.payment_status !== "not_required" && !isFinished(current);
       const paymentLine = order.payment_status === "paid" ? `<p class="order-payment-state paid">Payment confirmed</p><button class="paid-receipt-button" type="button" data-receipt-order="${escapeAttr(order.order_number)}">Download payment receipt (PDF)</button>` : unpaid ? `<p class="order-payment-state">Payment pending · Shipping included</p><button class="pay-order-button" type="button" data-pay-order="${escapeAttr(order.order_number)}">Pay securely with Paystack</button>` : "";
-      return `<details class="order-card"${trackedOrder === order.order_number ? " open" : ""}><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">${tracking ? "View order tracking" : "View order details"} <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
+      return `<details class="order-card"${(trackedOrder === order.order_number || returnedOrderNumber === order.order_number) ? " open" : ""}><summary class="order-card-summary"><div class="order-card-head"><strong>${escapeHtml(order.order_number)}</strong><span class="order-status">${escapeHtml(current)}</span></div><p class="order-card-meta">${date} · ${money(order.estimated_total)}</p><p class="order-card-items">${summary || "Order details"}</p><span class="order-expand-label">${tracking ? "View order tracking" : "View order details"} <span aria-hidden="true">＋</span></span></summary><div class="order-card-details"><div class="tracking-heading"><span class="eyebrow">ORDER TRACKING</span><strong>${escapeHtml(current)}</strong></div>${timeline}<div class="tracking-items"><span class="eyebrow">YOUR ITEMS</span><ul>${details}</ul></div><p class="tracking-updated">${latestEvent ? `Last updated ${escapeHtml(formatStamp(latestEvent.created_at))}` : `Placed ${escapeHtml(date)}`}</p>${paymentLine}${canCancel ? `<button class="cancel-order-button" type="button" data-cancel-order="${escapeAttr(order.order_number)}">Cancel this order</button><p class="cancel-order-note">Orders cannot be cancelled after they have shipped.</p>` : ""}</div></details>`;
     }).join("");
   }
   $("#order-history").addEventListener("click", async event => {
@@ -1381,6 +1451,10 @@
     supabaseClient.auth.onAuthStateChange((event, session) => {
       authReady = true;
       signedInUser = session?.user || null;
+      if (verifiedPaymentUserId !== signedInUser?.id) { paymentVerificationComplete = false; verifiedPaymentUserId = ""; returnedOrderNumber = ""; }
+      if (verifiedAdminUserId !== signedInUser?.id) verifiedAdminUserId = "";
+      setTimeout(refreshAdminAccess, 0);
+      if (paymentReturned && !passwordRecoveryMode) setTimeout(confirmReturnedPayment, 0);
       if (event === "PASSWORD_RECOVERY") {
         passwordRecoveryMode = true;
         renderAccountState();
@@ -1398,6 +1472,7 @@
   }
   renderAccountState(); setAuthMode("signup");
   if (trackedOrder || paymentReturned) openAccount("signin");
+  if (paymentReturned) setTimeout(confirmReturnedPayment, 0);
   loadMaintenanceMode();
   document.addEventListener("keydown", e => { if (e.key === "Escape") { setMobileNav(false); closeModal(); closeAccount(); closeVariantPicker(); closeProductDetail(); closeContactForm(); setAccountPopover(false); } });
   $("#year").textContent = new Date().getFullYear();
@@ -1475,17 +1550,18 @@
     const endpoint = window.TRikonicOrderEndpoint || "";
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
     try {
-      const { error: saveError } = await supabaseClient.from("orders").insert({
-        order_number: order.orderId,
-        customer_name: order.customer.name,
-        contact: order.customer.contact,
-        delivery_area: order.customer.location || "",
-        notes: order.customer.notes || "",
-        items: order.items,
-        estimated_total: order.estimatedTotal,
-        currency: order.currency
-      });
-      if (saveError) throw saveError;
+      const { data: created, error: saveError } = await supabaseClient.functions.invoke("create-order", { body: {
+        orderId: order.orderId, customer: order.customer,
+        items: items.map(item => ({ id: item.id, color: item.color, size: item.size, variant: item.variant, quantity: item.quantity, image: item.image }))
+      } });
+      if (saveError || !created?.order) {
+        let message = created?.error || saveError?.message;
+        if (saveError?.context instanceof Response) {
+          const details = await saveError.context.json().catch(() => ({})); message = details.error || message;
+        }
+        throw new Error(message || "Could not save your order. Please try again.");
+      }
+      Object.assign(order, created.order);
       savedReceiptOrder = order;
       $("#success-order-id").textContent = `Order ID: ${order.orderId}`;
       renderCheckoutReceipt(order.items, "#success-receipt-items", "#success-receipt-total");
