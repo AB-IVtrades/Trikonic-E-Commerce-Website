@@ -723,3 +723,7 @@ body.profile-photo-open { position: fixed; top: var(--photo-page-top); left: 0; 
 .detail-price{flex-direction:column;align-items:flex-start;gap:0}.detail-price>.product-shipping{display:block;width:100%}
 
 .detail-option-group.choice-required{outline:2px solid var(--orange);outline-offset:5px;border-radius:3px}.detail-option-group.choice-required .detail-option-heading{color:#a54000}
+
+/* Keep header controls and the home logo visually light. */
+.header-search button,.header-search button:hover,.header-search button:active{background:transparent;color:var(--ink);box-shadow:none}
+.site-header .brand-mark,.maintenance-card .brand-mark{background:transparent}
