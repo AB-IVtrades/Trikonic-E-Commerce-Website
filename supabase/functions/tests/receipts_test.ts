@@ -228,73 +228,25 @@ Deno.test("download authenticates users, checks ownership and blocks unpaid orde
     globalThis.fetch = realFetch;
   }
 });
-Deno.test("webhook verifies payment then sends branded email and the saved PDF once", async () => {
+Deno.test("signed webhook queues verification without spreadsheet or email dependencies", async () => {
   let handler: (r: Request) => Promise<Response>;
   const serve = Deno.serve;
   Deno.serve = ((h: typeof handler) => {
     handler = h;
   }) as typeof Deno.serve;
-  for (
-    const [key, value] of Object.entries({
-      SUPABASE_URL: "https://backend.test",
-      SUPABASE_SERVICE_ROLE_KEY: "secret",
-      PAYSTACK_SECRET_KEY: "paystack-test",
-      APPS_SCRIPT_ORDER_ENDPOINT: "https://sheet.test",
-      ORDER_STATUS_SYNC_TOKEN: "sync",
-      RESEND_API_KEY: "resend-test",
-    })
-  ) Deno.env.set(key, value);
-  let order: any = {
-      ...sample,
-      payment_status: "pending",
-      email_notified_at: null,
-      status: "Order Received",
-      pricing_verified_at: "2026-11-16T00:00:00Z",
-    },
-    emails = 0,
-    amount = 85000,
-    attachment = "";
-  globalThis.fetch = async (input: string | URL | Request, init?: any) => {
-    const url = String(input);
-    if (url.includes("/rest/v1/payment_attempts")) return Response.json([]);
-    if (url.includes("/rest/v1/orders")) {
-      if (init?.method === "PATCH") {
-        Object.assign(order, JSON.parse(String(init.body)));
-        return init.headers &&
-            new Headers(init.headers).get("Prefer") === "return=representation"
-          ? Response.json([order])
-          : new Response(null, { status: 204 });
-      }
-      return Response.json([order]);
-    }
-    if (url.includes("api.paystack.co/")) {
-      return Response.json({
-        status: true,
-        data: {
-          status: "success",
-          currency: "GHS",
-          amount,
-          reference: sample.payment_reference,
-          paid_at: sample.payment_paid_at,
-        },
-      });
-    }
-    if (url === "https://sheet.test") return Response.json({ ok: true });
-    if (url.includes("/storage/v1/")) {
-      return new Response(new Uint8Array([37, 80, 68, 70]));
-    }
-    if (url === "https://api.resend.com/emails") {
-      emails++;
-      const payload = JSON.parse(String(init?.body));
-      assert(order.payment_status === "paid");
-      assert(
-        payload.html.includes("Your order summary") &&
-          payload.html.includes("#ff710f"),
-      );
-      attachment = payload.attachments[0].content;
-      return Response.json({ id: "mock" });
-    }
-    throw new Error(`Unexpected fetch ${url}`);
+  Deno.env.set("SUPABASE_URL", "https://backend.test");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "secret");
+  Deno.env.set("PAYSTACK_SECRET_KEY", "paystack-test");
+  const jobs = new Set();
+  let available = true;
+  globalThis.fetch = async (input, init: any) => {
+    assert(
+      String(input) ===
+        "https://backend.test/rest/v1/rpc/enqueue_payment_check",
+    );
+    if (!available) return new Response("{}", { status: 503 });
+    jobs.add(JSON.parse(init.body).p_reference);
+    return Response.json(true);
   };
   try {
     await import("../paystack-webhook/index.ts");
@@ -320,18 +272,13 @@ Deno.test("webhook verifies payment then sends branded email and the saved PDF o
         headers: { "x-paystack-signature": sig },
         body,
       });
-    assert((await handler!(request("invalid"))).status === 401 && emails === 0);
-    amount = 1;
     assert(
-      (await handler!(request())).status === 409 && emails === 0 &&
-        order.payment_status === "pending",
+      (await handler!(request("invalid"))).status === 401 && jobs.size === 0,
     );
-    amount = 85000;
-    assert(
-      (await handler!(request())).status === 200 && emails === 1 &&
-        attachment === btoa("%PDF"),
-    );
-    assert((await handler!(request())).status === 200 && emails === 1);
+    assert((await handler!(request())).status === 200);
+    assert((await handler!(request())).status === 200 && jobs.size === 1);
+    available = false;
+    assert((await handler!(request())).status === 503);
   } finally {
     Deno.serve = serve;
     globalThis.fetch = realFetch;

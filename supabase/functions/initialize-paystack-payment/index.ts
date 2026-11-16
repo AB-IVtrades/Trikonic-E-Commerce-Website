@@ -1,4 +1,3 @@
-import { syncOrderSheet } from "../_shared/sheets.ts";
 import { rateLimit } from "../_shared/limits.ts";
 import {
   cors,
@@ -9,7 +8,6 @@ import {
   RequestError,
   rows,
 } from "../_shared/server.ts";
-import { assertTrustedPricing } from "../_shared/catalog.ts";
 import { verifyAndRecord } from "../_shared/payments.ts";
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -47,8 +45,7 @@ Deno.serve(async (request) => {
         409,
       );
     }
-    await assertTrustedPricing(order);
-    await syncOrderSheet(order);
+    if (!order.pricing_verified_at) throw new RequestError("This older order needs a new verified checkout. Please recreate it from your cart.",409);
     const [active] = await rows("payment_attempts", {
       order_id: `eq.${order.id}`,
       state: "in.(initializing,ready)",

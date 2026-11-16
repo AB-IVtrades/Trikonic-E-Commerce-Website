@@ -99,13 +99,12 @@ Deno.test("verification rejects mismatches, pending and failed never mark paid, 
     if (url.hostname === "api.paystack.co") {
       return Response.json({ status: true, data: transaction });
     }
-    if (url.pathname === "/rest/v1/orders" && init?.method === "PATCH") {
+    if (url.pathname === "/rest/v1/rpc/finalize_verified_payment") {
       const body = JSON.parse(String(init.body));
-      assert(body.payment_status === "paid");
-      assert(url.searchParams.get("payment_status") === "eq.pending");
-      paidWrites++;
-      saved = { ...saved, ...body };
-      return Response.json([saved]);
+      assert(body.p_transaction.status === "success");
+      if (saved.payment_status !== "paid") paidWrites++;
+      saved = { ...saved, payment_status: "paid", status: "Payment Made" };
+      return Response.json(saved);
     }
     if (url.pathname === "/rest/v1/payment_attempts") return Response.json([]);
     throw new Error(`Unexpected request ${url}`);
@@ -178,6 +177,14 @@ Deno.test("callback endpoint authenticates, scopes reference to owner and return
     }
     if (url.pathname === "/rest/v1/payment_attempts") {
       return Response.json(init?.method === "PATCH" ? {} : [attempt]);
+    }
+    if (url.pathname === "/rest/v1/rpc/finalize_verified_payment") {
+      paidWrites++;
+      return Response.json({
+        ...order,
+        payment_status: "paid",
+        status: "Payment Made",
+      });
     }
     if (url.pathname === "/rest/v1/orders") {
       if (init?.method === "PATCH") {

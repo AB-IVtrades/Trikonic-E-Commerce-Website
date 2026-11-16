@@ -25,5 +25,5 @@ const gs=vm.createContext({PropertiesService:{getScriptProperties:()=>({getPrope
 vm.runInContext(readFileSync('google-apps-script.gs','utf8'),gs);gs.getTrikonicSpreadsheet_=()=>{sheetAccess++;return{getSheetByName:()=>sheet}};gs.ensureOrderHeaders=()=>{};
 const post=payload=>JSON.parse(gs.doPost({postData:{contents:JSON.stringify(payload)}}).text);
 assert.equal(post({orderId:'fake',items:[]}).ok,false);assert.equal(sheetAccess,0);
-const order={token:'server-token',orderId:'TRK-test',customer:{name:'=IMPORTXML("https://evil.test")',contact:'+233000000000'},items:[],estimatedTotal:100};assert.equal(post(order).ok,true);assert.equal(rows.length,1);assert.equal(rows[0][3][0],"'");assert.equal(rows[0][4][0],"'");assert.equal(post(order).unchanged,true);assert.equal(rows.length,1);
-console.log('Storefront passed: pagination/filter resets, separate shipping, required-field UI, safe markup/URLs, CSP, authenticated/idempotent sheet writes and formula safety.');
+const order={token:'server-token',orderId:'TRK-test',customer:{name:'=IMPORTXML("https://evil.test")',contact:'+233000000000'},items:[],estimatedTotal:100};assert.equal(post(order).ok,false);assert.equal(rows.length,0);assert.equal(sheetAccess,0);
+console.log('Storefront passed: pagination/filter resets, separate shipping, required-field UI, safe markup/URLs, CSP, retired spreadsheet order writes.');

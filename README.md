@@ -77,41 +77,25 @@ Photos added or replaced in `images/` on `main` are checked by the **Compress pr
 
 The example products and contact details are placeholders. Replace them before launch. Search the project for `hello@trikonic.com` to update the contact address.
 
-## Send order requests to Google Sheets
+## Secure order backend and admin dashboard
 
-Customers must sign in or create and confirm an account before checkout. Orders are saved to Supabase and `Trikonic Orders` in Google Sheets. The customer is then sent to Paystack hosted checkout to pay by supported card or mobile money. The payment receipt and tracking number are emailed only after the signed Paystack webhook is verified; SMS is optional and requires Hubtel credentials. The downloadable PDF before payment is an order summary, not proof of payment. Item prices and the separate shipping fee entered in **Website Catalog** are shown on product cards and product details. The cart and checkout separate the item subtotal and shipping in GHS. Shipping is charged once per checkout item, regardless of quantity. When setting a separate rate, adjust the regular, variant and sale prices as applicable so shipping is charged once.
+Open `/admin.html` and sign in with the existing store administrator account. Complete authenticator verification before opening customer orders. First-time setup shows a QR code to scan using your own authenticator app; enter its code to finish. Every admin API independently checks the fresh server-controlled admin role and MFA assurance (`aal2`). There are no staff accounts or manual paid overrides.
 
-To connect the order form and product catalog to the existing Sheet:
+Supabase is now the official order/payment record. Sheets remains the product catalog only; its order-writing and status-sync endpoints are retired. Historical Sheet rows remain an archive and cannot alter website orders. Keep restricted access to any historical customer information still in that archive. Older unpaid orders without verified pricing must be recreated through checkout.
 
-1. In the Trikonic spreadsheet choose **Extensions → Apps Script**.
-2. Replace the editor contents with `google-apps-script.gs` from this project and save. It reads the `Website Catalog` tab and writes new orders to `Trikonic Orders`.
-3. In the function picker, choose `setupTrikonicOrdersSheet` and click **Run** once. Approve the Apps Script authorization prompt. This immediately adds separate `Order Date` and `Order Time` columns, preserves the existing order columns, and fills times for existing rows from their timestamp. New orders also get the date and time automatically.
-4. In Apps Script choose **Deploy → Manage deployments**, edit the Web App deployment, select **New version**, and deploy. Keep **Execute as** set to your account and **Who has access** set to **Anyone**. The Web App URL should remain the same, so `config.js` does not need a change.
-5. Refresh the website. Submit one clearly marked test order and check `Trikonic Orders` and **My account → Order history**; remove any test records afterwards.
+**Orders:** search by number/customer, filter payment and delivery state, review exceptions, and browse 25-record pages. Open an order for customer details, item/price snapshots, Paystack references, automatic jobs and audit history. **Recheck with Paystack** verifies payment instead of letting an admin mark it paid.
 
-The Web App must accept requests from website visitors, so its URL is public. Keep only order fields in this spreadsheet, restrict spreadsheet access to your team, and redeploy the Apps Script deployment after changing its code. Google Apps Script redirects its response, so the browser cannot verify the Sheet write; check the Sheet when you first set this up.
+**Shipments:** create a named batch, then open paid orders to allocate item quantities into it. One order can use multiple batches. Search finds older unshipped batches. Transactional locks prevent over-allocation and stale shipment edits. Advance one shipment to update every linked item's stage. An order follows its least-advanced outstanding items and is only delivered when every item is delivered. Customers can open **View shipment items** to see partial deliveries. Cancellation is blocked after any item ships. Paid cancellations and duplicate successful references require refund review; there are no automatic refunds.
 
-### Update order status from the Sheet
+Signed Paystack webhooks enqueue payment verification quickly. Return-page verification uses the same transactional payment recorder. Reference, amount, currency and customer checks must match; confirmed payment atomically queues a receipt job. Email outages never undo payment confirmation. Receipts retain the existing private PDF, colours and Resend idempotency key.
 
-The customer’s **My account → Order history** shows a private tracking timeline. Change the `Status` cell in column J of `Trikonic Orders`; the dropdown offers `Order Received`, `Payment Made`, `Order Placed`, `Order Shipped`, `Order Arrived in Ghana`, `Order Arrived at Warehouse`, `Order Ready for Collection`, `Order Delivered`, and `Order Cancelled`. An installable Apps Script edit trigger sends only that order number and status to the Supabase `order-status-sync` function. Supabase records each change, and the customer can open the order card and refresh to see the latest status. The function validates a shared secret and updates by order number; order reads remain protected by the customer ownership policies.
+`trikonic-order-recovery` runs every five minutes. It claims up to 50 due jobs using row locks and leases and invokes independent workers with at most four concurrent requests. Expired leases recover interrupted work. Retries increase from five minutes to a maximum of six hours. Unresolved payments require review after 72 hours and are never assumed successful. Receipt retries stop at 23 hours to stay within Resend's 24-hour deduplication window; ambiguous deliveries require review rather than a blind duplicate send. Existing paid receipts are not resent during migration. No new shipping emails or SMS are enabled.
 
-One-time secure setup:
+Worker authentication uses an internally generated random credential encrypted in Supabase Vault. Cron commands contain no plaintext credentials; browser callers cannot read the queue, audit records, worker credential or privileged RPCs. Maintenance remains strictly manual. Saved verified orders can be paid, managed and cancelled without Google Sheets. Creating a new order still requires the trusted product catalog for current prices.
 
-1. In a terminal, run `openssl rand -hex 32` to make a private shared token. Keep it out of chat and source control.
-2. In **Supabase → Edge Functions → Secrets**, add `ORDER_STATUS_SYNC_TOKEN` with that value. The `order-status-sync` Edge Function is deployed. Its endpoint is `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/order-status-sync`.
-3. In the spreadsheet, open **Extensions → Apps Script → Project Settings → Script properties** and add `TRIKONIC_STATUS_SYNC_TOKEN` with the exact same value.
-4. Replace the Apps Script editor contents with `google-apps-script.gs` and save. Run `authorizeTrikonicStatusSync` once manually and approve Google's external request permission. This grants the scope that an edit trigger cannot prompt for itself.
-5. Run `setupTrikonicOrdersSheet` and `setupOrderStatusSync` once each. The first function refreshes the Status dropdown; the second installs the edit trigger.
-6. Choose **Deploy → Manage deployments**, edit the existing Web App, choose **New version**, and deploy. The existing Web App URL stays the same.
-7. Change a test order’s status in column J and confirm the cell note says it synced. Open that customer’s account, click **Refresh**, and expand the order to view its tracking timeline. Avoid using a real customer order for the test.
+Apply migrations in order, deploy the functions, then activate `activate_order_recovery`. Deploy the catalog-only Apps Script revision at the existing URL and retire the old order-status endpoint (HTTP 410). Run `deno test --allow-env --allow-read --allow-write=/private/tmp/trikonic-receipt-preview supabase/functions/tests/` and the four storefront `scripts/test-*.cjs` checks. `supabase/tests/order_operations.sql` tests actual transactional rules with rolled-back fixtures and no external emails or provider requests.
 
-Keep the shared token only in the Supabase function secret and Apps Script project properties. If it is exposed, replace it in both places. A sheet status edit is the staff control; customers can only read their own order and status history.
-
-### Customer order cancellation
-
-Customers can cancel an order from its expanded card in **My account → Order history** while its status is `Order Received`, `Payment Made`, or `Order Placed`. The cancellation endpoint verifies the signed-in user owns that order, then rechecks the spreadsheet status under a script lock before setting it to `Order Cancelled`. The sheet's existing edit trigger syncs the status and tracking event back to Supabase. Once the status reaches `Order Shipped` or later, the customer cancellation button is hidden and the endpoint rejects cancellation even if called directly.
-
-The `customer-cancel-order` Edge Function requires a signed-in Supabase JWT and uses the existing `ORDER_STATUS_SYNC_TOKEN` secret to authenticate its request to Apps Script. The same value must remain in Apps Script project properties as `TRIKONIC_STATUS_SYNC_TOKEN`. After updating `google-apps-script.gs`, save it and redeploy the Web App as a **New version**. The existing `TRikonicOrderEndpoint` in `config.js` is passed to the function; it is a public Apps Script URL, while the shared token remains server-side.
+Before calling acceptance complete, the owner must enroll MFA and verify a Paystack test-mode checkout, receipt email/PDF and customer tracking. Do not use real payment credentials or swap production keys merely for testing. Monitor **Needs attention**, `cron.job_run_details`, `net._http_response` and private job states. No paid-plan upgrade is included; free-plan leaked-password protection remains a separate account-plan decision.
 
 ## Deploy on Vercel
 
@@ -129,7 +113,7 @@ The `customer-cancel-order` Edge Function requires a signed-in Supabase JWT and 
 
 ### Paystack online payments and tracking notices
 
-The checkout uses Paystack's hosted checkout. Orders remain unpaid until the server verifies the transaction with Paystack. The signed webhook and authenticated return-page verification share the same amount, currency, reference and ownership checks. The backend checks the paid amount and currency against the saved order. After confirmation it updates the Supabase order status, advances the Google Sheet status from `Order Received` to `Payment Made`, and emails the customer their order/tracking number. Customers can retry a pending payment from **My account → Order history**.
+The checkout uses Paystack's hosted checkout. Orders remain unpaid until the server verifies the transaction with Paystack. The signed webhook and authenticated return-page verification share the same amount, currency, reference and ownership checks. The backend checks the paid amount and currency against the saved order. After confirmation it updates the Supabase order status and queues receipt delivery separately. Customers can retry a pending payment from **My account → Order history**.
 
 Set these values in **Supabase → Edge Functions → Secrets** (do not paste secrets into chat or source files):
 
@@ -142,11 +126,9 @@ Set these values in **Supabase → Edge Functions → Secrets** (do not paste se
 
 In Paystack **Developers → API configuration** (test mode), generate a webhook signing secret and add it as `PAYSTACK_WEBHOOK_SECRET` in Supabase. Set the webhook URL to `https://wxhdfrnjoohiktqujbik.supabase.co/functions/v1/paystack-webhook` in the test environment's webhook settings. Keep the webhook and both Paystack secrets in test mode during testing. The webhook does not use a browser return page as proof of payment.
 
-Before testing, replace the Apps Script editor contents with this repository's `google-apps-script.gs`, save, and deploy it as a **new Web App version**. Keep the same `TRIKONIC_STATUS_SYNC_TOKEN` script property and make sure `APPS_SCRIPT_ORDER_ENDPOINT` points at that deployment. Payment confirmations will retry the webhook until the Sheet status update and email notification both succeed.
+The Apps Script deployment is catalog-only. Payment processing and cancellations no longer use the spreadsheet sync token. Recovery jobs handle payment checks and receipt delivery independently.
 
-For optional SMS order-number notices, set up a Hubtel SMS account and approved sender ID, then add `HUBTEL_SMS_CLIENT_ID`, `HUBTEL_SMS_CLIENT_SECRET`, and `HUBTEL_SMS_SENDER_ID` as Supabase Edge Function secrets. A valid Ghana mobile number must be entered in the order contact field. Without these Hubtel secrets, email notifications still work.
-
-Before taking real payments, complete Paystack business activation and test card/mobile-money flows, failed payments, retries, and spreadsheet status updates. The total charged is the item subtotal plus one shipping fee per checkout item, regardless of quantity.
+Before taking real payments, complete Paystack business activation and test card/mobile-money flows, failed payments, retries, and customer tracking updates. The total charged is the item subtotal plus one shipping fee per checkout item, regardless of quantity.
 
 ### Branded payment receipts
 

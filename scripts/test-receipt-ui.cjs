@@ -41,7 +41,7 @@ const button = { dataset: { receiptOrder: 'TRK-1794816000000-PAID' }, disabled: 
   assert.equal(button.disabled, false);
   context.fetch = async () => ({ ok: false, json: async () => ({ error: 'Payment is pending' }) });
   clicked = false;
-  await history.handler({ target: { closest: () => button }, preventDefault() {}, stopPropagation() {} });
+  await history.handler({ target: { closest: selector => selector === '[data-receipt-order]' ? button : null }, preventDefault() {}, stopPropagation() {} });
   assert.equal(clicked, false);
   assert.equal(status.textContent, 'Payment is pending');
   assert.equal(button.disabled, false);

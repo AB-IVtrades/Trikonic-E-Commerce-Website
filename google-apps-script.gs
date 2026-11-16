@@ -146,48 +146,7 @@ function getTrikonicSpreadsheet_() {
 }
 
 function doPost(e) {
-  try {
-    const payload = JSON.parse(e.postData.contents);
-    if (payload.action === "cancelOrder") return cancelOrderInSheet(payload);
-    if (payload.action === "paymentMade") return markPaymentMadeInSheet(payload);
-    // Only the verified server checkout may write order rows.
-    const expectedToken = PropertiesService.getScriptProperties().getProperty(STATUS_SYNC_PROPERTY) || "";
-    if (!expectedToken || !payload.token || payload.token !== expectedToken) {
-      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: "Unauthorized" })).setMimeType(ContentService.MimeType.JSON);
-    }
-    const order = payload;
-    const sheet = getTrikonicSpreadsheet_().getSheetByName(SHEET_NAME)
-      || getTrikonicSpreadsheet_().insertSheet(SHEET_NAME);
-    ensureOrderHeaders(sheet);
-    const items = (order.items || []).map(item => `${item.quantity} x ${item.name}${item.color ? ` [Color: ${item.color}]` : ""}${item.size ? ` [Size: ${item.size}]` : ""}${item.variant ? ` [Option: ${item.variant}]` : ""}${item.availability === "preorder" ? " [PRE-ORDER]" : item.availability === "out_of_stock" ? " [OUT OF STOCK]" : " [IN STOCK]"}${item.flashSale ? " [FLASH SALE]" : ""} @ GHS ${item.unitPrice}`).join("; ");
-    const receivedAt = new Date();
-    const orderRow = [
-      receivedAt, receivedAt, order.orderId || "", order.customer?.name || "", order.customer?.contact || "",
-      order.customer?.location || "", items, Number(order.estimatedTotal || 0), order.customer?.notes || "", "Order Received"
-    ];
-    if (typeof order.shippingTotal === "number" && Number.isFinite(order.shippingTotal) && order.shippingTotal >= 0) {
-      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      const shippingColumn = headers.includes(SHIPPING_FEE_HEADER) ? headers.indexOf(SHIPPING_FEE_HEADER) + 1 : headers.length + 1;
-      if (shippingColumn > headers.length) {
-        if (shippingColumn > sheet.getMaxColumns()) sheet.insertColumnAfter(sheet.getMaxColumns());
-        sheet.getRange(1, shippingColumn).setValue(SHIPPING_FEE_HEADER);
-        sheet.getRange(2, shippingColumn, sheet.getMaxRows() - 1, 1).setNumberFormat("0.00");
-      }
-      while (orderRow.length < shippingColumn) orderRow.push("");
-      orderRow[shippingColumn - 1] = order.shippingTotal;
-    }
-    const lock = LockService.getScriptLock();
-    lock.waitLock(10000);
-    try {
-      const ids = sheet.getLastRow() > 1 ? sheet.getRange(2, 3, sheet.getLastRow() - 1, 1).getDisplayValues().flat() : [];
-      if (ids.some(value => String(value) === String(order.orderId))) return ContentService.createTextOutput(JSON.stringify({ ok: true, unchanged: true })).setMimeType(ContentService.MimeType.JSON);
-      // Text beginning with a spreadsheet formula marker must stay literal text.
-      sheet.appendRow(orderRow.map(value => typeof value === "string" && /^[\s]*[=+@-]/.test(value) ? "'" + value : value));
-    } finally { lock.releaseLock(); }
-    return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(error) })).setMimeType(ContentService.MimeType.JSON);
-  }
+  return ContentService.createTextOutput(JSON.stringify({ ok: false, error: "Spreadsheet order writes are retired. Use the secure store backend." })).setMimeType(ContentService.MimeType.JSON);
 }
 
 // Called by the verified Paystack webhook through the server-side Edge Function.
@@ -374,6 +333,7 @@ function authorizeTrikonicStatusSync() {
 
 // An installable onEdit trigger sends only the order number and status, never customer data.
 function syncTrikonicOrderStatusOnEdit(event) {
+  return; // Retired: Supabase is the only order-status authority.
   if (!event || !event.range) return;
   const range = event.range;
   const sheet = range.getSheet();

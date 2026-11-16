@@ -31,44 +31,34 @@ Deno.test("durable limiter uses keyed identifiers and fails closed on rejection"
     globalThis.fetch = realFetch;
   }
 });
-Deno.test("cancellation cannot redirect a server token to a caller-selected script", async () => {
+Deno.test("cancellation ignores caller-selected scripts and runs in the private database", async () => {
   let handler: (r: Request) => Promise<Response>;
   const serve = Deno.serve;
   Deno.serve = ((h: typeof handler) => {
     handler = h;
   }) as typeof Deno.serve;
-  Deno.env.set("ORDER_STATUS_SYNC_TOKEN", "sync-secret");
-  Deno.env.set(
-    "APPS_SCRIPT_ORDER_ENDPOINT",
-    "https://script.google.com/macros/s/trusted/exec",
-  );
-  let owned = true, scriptCalls = 0;
+  let owned = true, calls = 0;
   globalThis.fetch = async (input, init: any) => {
     const url = new URL(String(input));
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: "customer-1",
+        email: "ama@example.test",
+        email_confirmed_at: "2026-01-01",
+      });
+    }
     if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
       return Response.json(true);
     }
-    if (url.pathname === "/auth/v1/user") {
-      return Response.json({ id: "customer-1" });
-    }
-    if (url.pathname === "/rest/v1/orders") {
-      assert(url.searchParams.get("user_id") === "eq.customer-1");
-      return Response.json(
-        owned
-          ? [{
-            id: "order-1",
-            user_id: "customer-1",
-            status: init?.method === "PATCH"
-              ? "Order Cancelled"
-              : "Order Received",
-          }]
-          : [],
-      );
-    }
-    assert(url.href === "https://script.google.com/macros/s/trusted/exec");
-    assert(JSON.parse(init.body).token === "sync-secret");
-    scriptCalls++;
-    return Response.json({ ok: true });
+    assert(url.pathname === "/rest/v1/rpc/cancel_customer_order");
+    const body = JSON.parse(init.body);
+    assert(body.p_user === "customer-1");
+    calls++;
+    return owned
+      ? Response.json({ ok: true, status: "Order Cancelled" })
+      : Response.json({ code: "P0001", message: "Order not found" }, {
+        status: 400,
+      });
   };
   try {
     await import("../customer-cancel-order/index.ts");
@@ -82,9 +72,9 @@ Deno.test("cancellation cannot redirect a server token to a caller-selected scri
             "https://script.google.com/macros/s/attacker/exec",
         }),
       });
-    assert((await handler!(request())).status === 200 && scriptCalls === 1);
+    assert((await handler!(request())).status === 200 && calls === 1);
     owned = false;
-    assert((await handler!(request())).status === 404 && scriptCalls === 1);
+    assert((await handler!(request())).status === 404);
   } finally {
     Deno.serve = serve;
     globalThis.fetch = realFetch;
