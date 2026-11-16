@@ -1,8 +1,9 @@
 begin;
 insert into auth.users(id,raw_app_meta_data) values('00000000-0000-0000-0000-000000000081','{}'),('00000000-0000-0000-0000-000000000082','{}');
+insert into auth.sessions(id,user_id,created_at)values('00000000-0000-0000-0000-000000000088','00000000-0000-0000-0000-000000000081',now());
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 insert into public.orders(order_number,user_id,customer_name,customer_email,contact,items,estimated_total,pricing_verified_at) values('TRK-1794840000000-RLS1','00000000-0000-0000-0000-000000000081','Test','rls@example.test','test','[]',1,now()),('TRK-1794840000000-RLS2','00000000-0000-0000-0000-000000000082','Test','rls@example.test','test','[]',1,now());
-select set_config('request.jwt.claims','{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000081","user_metadata":{"store_role":"admin"}}',true);
+select set_config('request.jwt.claims','{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000081","session_id":"00000000-0000-0000-0000-000000000088","user_metadata":{"store_role":"admin"}}',true);
 set local role authenticated;
 do $$ declare affected int;blocked boolean;begin
  if public.is_store_admin() then raise exception 'Customer-controlled metadata grants admin';end if;

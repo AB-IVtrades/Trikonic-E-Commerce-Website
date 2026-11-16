@@ -40,6 +40,7 @@ Deno.test("cancellation ignores caller-selected scripts and runs in the private 
   let owned = true, calls = 0;
   globalThis.fetch = async (input, init: any) => {
     const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/rpc/is_current_session_active") return Response.json(true);
     if (url.pathname === "/auth/v1/user") {
       return Response.json({
         id: "customer-1",
@@ -124,4 +125,9 @@ Deno.test("contact form rejects actual oversized bodies and enforces rate limits
     Deno.serve = serve;
     globalThis.fetch = realFetch;
   }
+});
+Deno.test("revoked devices fail before any private backend operation",async()=>{
+ const {customer}=await import('../_shared/server.ts');const old=fetch;let active=false;
+ globalThis.fetch=async input=>{const path=new URL(String(input)).pathname;if(path==='/auth/v1/user')return Response.json({id:'owner',email:'test@example.test',email_confirmed_at:'2026-01-01'});assert(path==='/rest/v1/rpc/is_current_session_active');return Response.json(active);};
+ try{let status=0;try{await customer(new Request('https://backend.test',{headers:{Authorization:'Bearer signed-user-token'}}));}catch(error:any){status=error.status;}assert(status===401);active=true;assert((await customer(new Request('https://backend.test',{headers:{Authorization:'Bearer signed-user-token'}}))).user.id==='owner');}finally{globalThis.fetch=old;}
 });

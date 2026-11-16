@@ -182,6 +182,7 @@ Deno.test("download authenticates users, checks ownership and blocks unpaid orde
     if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
       return Response.json(true);
     }
+    if (url.pathname === "/rest/v1/rpc/is_current_session_active") return Response.json(true);
     if (url.pathname === "/auth/v1/user") {
       return mode === "bad-auth"
         ? new Response("{}", { status: 401 })

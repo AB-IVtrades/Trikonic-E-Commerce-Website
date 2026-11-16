@@ -1067,6 +1067,7 @@
         fields.email.value = signedInUser?.email || "";
         fields.phone.value = signedInUser?.user_metadata?.checkout_phone || "";
         $("#profile-password-form").reset();
+        $("#profile-devices").replaceChildren(); $("#profile-devices-pages").replaceChildren();
         profilePage.querySelectorAll(".form-status").forEach(status => { status.textContent = ""; });
       }
     }
@@ -1092,7 +1093,29 @@
     }
   }
 
+  let devicePage = 1;
+  function deviceDescription(agent = "") {
+    const system = /iPhone|iPod/i.test(agent) ? "iPhone" : /iPad/i.test(agent) ? "iPad" : /Android/i.test(agent) ? "Android" : /Windows/i.test(agent) ? "Windows" : /Macintosh|Mac OS/i.test(agent) ? "Mac" : /Linux/i.test(agent) ? "Linux" : "Device";
+    const browser = /Edg/i.test(agent) ? "Edge" : /Firefox|FxiOS/i.test(agent) ? "Firefox" : /Chrome|CriOS/i.test(agent) ? "Chrome" : /Safari/i.test(agent) ? "Safari" : "Browser";
+    return `${system} · ${browser}`;
+  }
+  async function loadDeviceSessions() {
+    const owner = signedInUser?.id; if (!owner) return;
+    const {data,error} = await supabaseClient.rpc("manage_own_sessions", {p_action:"list",p_page:devicePage});
+    if (owner !== signedInUser?.id) return;
+    if (error) throw new Error(error.message || "Could not load devices.");
+    $("#profile-devices").innerHTML = data.sessions.map(session => `<article class="profile-device"><div><strong>${escapeHtml(deviceDescription(session.user_agent || ""))}${session.is_current ? " · This device" : ""}</strong><small>Signed in: ${escapeHtml(new Date(session.created_at).toLocaleString())}</small>${session.updated_at ? `<small>Session updated: ${escapeHtml(new Date(session.updated_at).toLocaleString())}</small>` : ""}</div><button class="button button-dark" type="button" ${session.is_current ? 'data-signout-current="true"' : `data-revoke-session="${escapeAttr(session.id)}"`}>Sign out${session.is_current ? " this device" : ""}</button></article>`).join("") || "No active devices found.";
+    $("#profile-devices-pages").innerHTML = `<button type="button" class="profile-reset" data-device-page="${data.page-1}" ${data.page<=1?"disabled":""}>Previous</button><span>Page ${Number(data.page)}</span><button type="button" class="profile-reset" data-device-page="${data.page+1}" ${data.page*20>=data.total?"disabled":""}>Next</button>`;
+  }
   if (profilePage) {
+    $("#profile-devices-refresh").addEventListener("click",event=>runProfileAction(event.currentTarget,$("#profile-devices-status"),async()=>{devicePage=1;await loadDeviceSessions();return "Devices refreshed.";}));
+    $("#profile-devices-pages").addEventListener("click",event=>{const button=event.target.closest("[data-device-page]");if(!button||button.disabled)return;runProfileAction(button,$("#profile-devices-status"),async()=>{devicePage=Number(button.dataset.devicePage);await loadDeviceSessions();return "Devices refreshed.";});});
+    $("#profile-devices").addEventListener("click",event=>{
+      const button=event.target.closest("button");if(!button||button.disabled)return;
+      if(button.dataset.signoutCurrent){signOut($("#profile-devices-status"));return;}
+      if(!button.dataset.revokeSession||!confirm("Sign out this device? It will need to sign in again."))return;
+      runProfileAction(button,$("#profile-devices-status"),async()=>{const owner=signedInUser?.id;const {error}=await supabaseClient.rpc("manage_own_sessions",{p_action:"revoke",p_target:button.dataset.revokeSession});if(owner!==signedInUser?.id)return "";if(error)throw error;await loadDeviceSessions();return "Device signed out. Its access to private account data has ended.";});
+    });
     $("#profile-signin").addEventListener("click", () => openAccount("signin"));
     $("#profile-orders").addEventListener("click", () => openAccount("signin", "history"));
     $("#profile-signout").addEventListener("click", () => signOut($("#profile-details-status")));
@@ -1558,9 +1581,18 @@
       status.classList.add("account-error");
     } finally { submit.disabled = false; }
   });
+  let checkingSession = false;
+  async function checkDeviceSession() {
+    if (!signedInUser || !supabaseClient || checkingSession || document.visibilityState === "hidden") return;
+    checkingSession = true; const owner = signedInUser.id;
+    try { const token = (await supabaseClient.auth.getSession()).data.session?.access_token; const {data,error} = await supabaseClient.rpc("is_current_session_active"); if (!error && data === false && signedInUser?.id === owner && (await supabaseClient.auth.getSession()).data.session?.access_token === token) await supabaseClient.auth.signOut({scope:"local"}); } catch (_) {} finally { checkingSession=false; }
+  }
+  window.addEventListener("focus",checkDeviceSession);
+  document.addEventListener("visibilitychange",checkDeviceSession);
+  setInterval(checkDeviceSession,60000);
   async function signOut(status) {
     if (!supabaseClient) return;
-    const { error } = await supabaseClient.auth.signOut();
+    const { error } = await supabaseClient.auth.signOut({ scope: "local" });
     if (error) status.textContent = "Could not sign out. Please try again.";
     else { signedInUser = null; renderAccountState(); setAuthMode("signin"); }
   }
@@ -1569,6 +1601,7 @@
     supabaseClient.auth.onAuthStateChange((event, session) => {
       authReady = true;
       signedInUser = session?.user || null;
+      if (!signedInUser) { accountOrders=[]; $("#order-history").replaceChildren(); }
       if (verifiedPaymentUserId !== signedInUser?.id) { paymentVerificationComplete = false; verifiedPaymentUserId = ""; returnedOrderNumber = ""; }
       if (verifiedAdminUserId !== signedInUser?.id) verifiedAdminUserId = "";
       setTimeout(refreshAdminAccess, 0);

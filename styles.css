@@ -727,3 +727,5 @@ body.profile-photo-open { position: fixed; top: var(--photo-page-top); left: 0; 
 /* Keep header controls and the home logo visually light. */
 .header-search button,.header-search button:hover,.header-search button:active{background:transparent;color:var(--ink);box-shadow:none}
 .site-header .brand-mark,.maintenance-card .brand-mark{background:transparent}
+
+.profile-device{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--line)}.profile-device small{display:block;margin-top:6px;color:var(--muted)}.profile-device-pages{display:flex;align-items:center;gap:16px;flex-wrap:wrap}@media(max-width:600px){.profile-device{align-items:flex-start;flex-direction:column}}

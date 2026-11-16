@@ -54,6 +54,12 @@ export async function customer(request: Request) {
   if (!user.id || !user.email || !user.email_confirmed_at) {
     throw new RequestError("Please confirm your email and sign in.", 401);
   }
+  const active = await fetch(`${env.url}/rest/v1/rpc/is_current_session_active`, {
+    method: "POST", headers: { apikey: env.key, Authorization: authorization, "Content-Type": "application/json" }, body: "{}",
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!active.ok) throw new RequestError("Could not verify your session. Please try again.", 503);
+  if (await active.json() !== true) throw new RequestError("This device has been signed out. Please sign in again.", 401);
   return { env, user };
 }
 export function failure(error: unknown) {

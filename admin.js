@@ -38,7 +38,7 @@
   }catch(e){if(seq===epoch)message(e.message,true);}
  }
  $('#login-form').addEventListener('submit',e=>{e.preventDefault();run(e.submitter,async()=>{const form=e.currentTarget;const values=new FormData(form);const {error}=await client.auth.signInWithPassword({email:values.get('email'),password:values.get('password')});if(error)throw error;form.reset();});});
- $('#signout').addEventListener('click',()=>run($('#signout'),async()=>{clearPrivateView();const {error}=await client.auth.signOut();if(error)throw error;}));
+ $('#signout').addEventListener('click',()=>run($('#signout'),async()=>{clearPrivateView();const {error}=await client.auth.signOut({scope:"local"});if(error)throw error;}));
  $('#enroll').addEventListener('click',()=>run($('#enroll'),async()=>{
   const {data:existing,error:listError}=await client.auth.mfa.listFactors();if(listError)throw listError;
   for(const factor of existing.all.filter(f=>f.factor_type==='totp'&&f.status==='unverified')){const {error}=await client.auth.mfa.unenroll({factorId:factor.id});if(error)throw error;}
@@ -101,5 +101,8 @@
   if(button.dataset.unassign)run(button,async()=>{const shipment=listedShipments.find(s=>s.id===button.dataset.shipment);await api('admin-shipments',{action:'unassign',shipment_id:shipment.id,version:shipment.version,allocation_id:button.dataset.unassign});await loadShipments();});
  });
  $('#delivery-filter').insertAdjacentHTML('beforeend',[...stages,'Order Cancelled'].map(stage=>`<option>${esc(stage)}</option>`).join(''));
+ let checkingDevice=false;
+ async function checkDevice(){if(!user||checkingDevice||document.visibilityState==='hidden')return;checkingDevice=true;const owner=user.id;try{const token=(await client.auth.getSession()).data.session?.access_token;const {data,error}=await client.rpc('is_current_session_active');if(!error&&data===false&&user?.id===owner&&(await client.auth.getSession()).data.session?.access_token===token){clearPrivateView();await client.auth.signOut({scope:'local'});}}catch{}finally{checkingDevice=false;}}
+ window.addEventListener('focus',checkDevice);document.addEventListener('visibilitychange',checkDevice);setInterval(checkDevice,60000);
  client.auth.onAuthStateChange(()=>{clearPrivateView();setTimeout(boot,0);});boot();
 })();

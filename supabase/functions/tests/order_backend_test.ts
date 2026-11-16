@@ -15,6 +15,7 @@ function token(aal: string) {
 Deno.test("admin requires fresh server-controlled role and authenticated MFA assurance", async () => {
   let role = "admin";
   globalThis.fetch = async (input) => {
+    if (String(input).endsWith("/rpc/is_current_session_active")) return Response.json(true);
     assert(String(input) === "https://backend.test/auth/v1/user");
     return Response.json({
       id: "admin-1",

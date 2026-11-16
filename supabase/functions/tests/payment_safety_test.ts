@@ -168,6 +168,7 @@ Deno.test("callback endpoint authenticates, scopes reference to owner and return
     if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
       return Response.json(true);
     }
+    if (url.pathname === "/rest/v1/rpc/is_current_session_active") return Response.json(true);
     if (url.pathname === "/auth/v1/user") {
       return Response.json({
         id: "user-1",
@@ -248,6 +249,7 @@ Deno.test("checkout uses confirmed customer and trusted catalog rather than clie
     if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
       return Response.json(true);
     }
+    if (url.pathname === "/rest/v1/rpc/is_current_session_active") return Response.json(true);
     if (url.pathname === "/auth/v1/user") {
       return Response.json({
         id: "user-1",
@@ -322,6 +324,7 @@ Deno.test("payment initialization uses saved amount, reserves before Paystack an
     if (url.pathname === "/rest/v1/rpc/consume_request_limit") {
       return Response.json(true);
     }
+    if (url.pathname === "/rest/v1/rpc/is_current_session_active") return Response.json(true);
     if (url.pathname === "/auth/v1/user") {
       return Response.json({
         id: "user-1",
