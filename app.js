@@ -15,6 +15,7 @@
   const trackedOrder = new URLSearchParams(location.search).get("track") || "";
   const paymentReturned = new URLSearchParams(location.search).get("payment") === "return";
   let verifiedAdminUserId = "";
+  let adminAccessReady = false, adminAccessVersion = 0;
   let paymentVerificationRunning = false;
   let paymentVerificationComplete = false;
   let verifiedPaymentUserId = "";
@@ -932,11 +933,13 @@
   const closeAccount = () => { accountBackdrop.classList.remove("show"); accountBackdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("no-scroll"); };
   function isStoreAdmin() { return Boolean(signedInUser?.id && verifiedAdminUserId === signedInUser.id); }
   async function refreshAdminAccess() {
-    const userId = signedInUser?.id;
+    const userId = signedInUser?.id, version = ++adminAccessVersion;
+    adminAccessReady = false;
     verifiedAdminUserId = "";
-    if (!userId || !supabaseClient) { renderMaintenanceMode(); return; }
+    if (!userId || !supabaseClient) { adminAccessReady = true; renderMaintenanceMode(); return; }
     const { data, error } = await supabaseClient.rpc("is_store_admin");
-    if (signedInUser?.id !== userId) return;
+    if (version !== adminAccessVersion || signedInUser?.id !== userId) return;
+    adminAccessReady = true;
     if (!error && data === true) verifiedAdminUserId = userId;
     renderMaintenanceMode();
   }
@@ -946,7 +949,7 @@
   const maintenanceToggle = $("#maintenance-toggle");
   function renderMaintenanceMode() {
     const isAdmin = isStoreAdmin();
-    const showScreen = manualMaintenance && !isAdmin && !profilePage;
+    const showScreen = maintenanceLoaded && authReady && adminAccessReady && manualMaintenance && !isAdmin && !profilePage;
     const screen = $("#maintenance-screen");
     if (showScreen && screen.hidden) {
       setMobileNav(false);
@@ -1661,7 +1664,7 @@
     supabaseClient.auth.onAuthStateChange((event, session) => {
       const version=++authStateVersion;
       // Never paint a cached account until its server session has been checked.
-      authReady=false; signedInUser=null; accountOrders=[];
+      authReady=false; adminAccessReady=false; ++adminAccessVersion; signedInUser=null; accountOrders=[];
       renderAccountState();
       setTimeout(()=>applyAuthState(event,session,version),0);
     });
