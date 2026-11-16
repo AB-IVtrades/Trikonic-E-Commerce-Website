@@ -1,7 +1,7 @@
 (() => {
   // The Google Sheet is the catalog source of truth. Never render bundled sample data first.
   let products = [];
-  const catalogImageVersion = "images-5ecf57a9351ac01b";
+  const catalogImageVersion = "images-e2b97256db956a82";
   let catalogState = "loading";
   const money = n => `GH₵${Number(n).toFixed(2)}`;
   const CART_KEY = "trikonic-cart-v1";
