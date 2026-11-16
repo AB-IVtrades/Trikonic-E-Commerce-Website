@@ -13,6 +13,11 @@ do $$ declare actor uuid;oid uuid;iid uuid;sid uuid;sid2 uuid;ver integer;result
  if(select count(*) from private.order_jobs where order_id=oid and kind='receipt')<>1 or(select count(*) from private.order_audit where order_id=oid and action='payment_verified')<>1 then raise exception 'Payment was not idempotent';end if;
  sid:=(public.order_operations(actor,'create_shipment','{"label":"Rollback batch A"}')->>'id')::uuid;
  sid2:=(public.order_operations(actor,'create_shipment','{"label":"Rollback batch B"}')->>'id')::uuid;
+ result:=public.order_operations(actor,'shipments','{"search":"Rollback batch","stage":2}');
+ if jsonb_array_length(result->'shipments')<>2 then raise exception 'Created shipments not listed';end if;
+ if not exists(select 1 from jsonb_array_elements(result->'shipments') x where x->>'id'=sid::text) then raise exception 'Created shipment missing from list';end if;
+ result:=public.order_operations(actor,'shipments','{"search":"Rollback batch","stage":7}');
+ if jsonb_array_length(result->'shipments')<>0 then raise exception 'Shipment stage filter ignored';end if;
  perform public.order_operations(actor,'allocate',jsonb_build_object('shipment_id',sid,'version',1,'items',jsonb_build_array(jsonb_build_object('item_id',iid,'quantity',1))));
  blocked:=false;begin perform public.order_operations(actor,'allocate',jsonb_build_object('shipment_id',sid2,'version',1,'items',jsonb_build_array(jsonb_build_object('item_id',iid,'quantity',2))));exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'Over-allocation accepted';end if;
  perform public.order_operations(actor,'advance',jsonb_build_object('shipment_id',sid,'version',2,'stage',7));
