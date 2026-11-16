@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../admin.js'),'utf8');
+const state=vm.runInNewContext('('+source.slice(source.indexOf('function assignmentState('),source.indexOf(' async function loadDetail('))+')');
+const paid={payment_status:'paid',status:'Payment Made'};
+const item={quantity:3,allocated:1,baseline_stage:1};
+assert.equal(state(paid,[item]).canAssign,true,'Partly allocated paid items must allow the remaining quantity');
+assert.equal(state(paid,[item]).remaining[0],2);
+assert.match(state({...paid,payment_status:'pending'},[item]).reason,/Payment is not confirmed/);
+assert.equal(state({...paid,payment_status:'pending'},[item]).canAssign,false);
+assert.match(state({...paid,status:'Order Cancelled'},[item]).reason,/cancelled/);
+assert.equal(state({...paid,status:'Order Cancelled'},[item]).canAssign,false);
+assert.match(state(paid,[{...item,allocated:3}]).reason,/already assigned/);
+assert.equal(state(paid,[{...item,baseline_stage:3}]).canAssign,false);
+assert.equal(state(paid,[{...item,allocated:3},item]).canAssign,true,'One fully allocated item must not hide another assignable item');
+assert.equal(state(paid,[]).canAssign,false);
+console.log('Admin shipment assignment checks passed');
