@@ -667,7 +667,31 @@
     return { images: [...photos], colorPhotos, typePhotos };
   }
   function showDetailPhoto(image) {
-    $("#detail-main-image").src = image;
+    const currentPhoto = $("#detail-main-image");
+    if (currentPhoto.getAttribute("src") !== (image || null)) {
+      const photo = document.createElement("img");
+      photo.id = currentPhoto.id;
+      photo.alt = currentPhoto.alt;
+      photo.style.display = "none";
+
+      const status = document.createElement("p");
+      status.className = "detail-photo-status";
+      status.setAttribute("role", "status");
+      status.textContent = image ? "Loading product photo…" : "Product photo unavailable.";
+
+      currentPhoto.parentElement.replaceChildren(photo, status);
+      if (image) {
+        photo.addEventListener("load", () => {
+          status.remove();
+          photo.style.removeProperty("display");
+        }, { once: true });
+        photo.addEventListener("error", () => {
+          photo.removeAttribute("src");
+          status.textContent = "Product photo unavailable.";
+        }, { once: true });
+        photo.src = image;
+      }
+    }
     $("#detail-thumbnails").querySelectorAll("[data-detail-image]").forEach(button => {
       const active = button.dataset.detailImage === image;
       button.classList.toggle("active", active);
