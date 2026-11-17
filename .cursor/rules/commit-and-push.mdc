@@ -1,0 +1,8 @@
+---
+description: Commit and push completed changes for this project
+alwaysApply: true
+---
+
+# Commit and push completed changes
+
+After verifying requested project changes, commit them and push to the repository's configured remote unless the user directs otherwise. Include only changes covered by the request, preserve unrelated work, and use a normal fast-forward push or an equivalent repository API update. Report the remote branch and commit after verifying the push.

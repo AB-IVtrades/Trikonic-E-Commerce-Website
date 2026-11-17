@@ -731,3 +731,8 @@ body.profile-photo-open { position: fixed; top: var(--photo-page-top); left: 0; 
 .profile-device{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--line)}.profile-device small{display:block;margin-top:6px;color:var(--muted)}.profile-device-pages{display:flex;align-items:center;gap:16px;flex-wrap:wrap}@media(max-width:600px){.profile-device{align-items:flex-start;flex-direction:column}}
 
 .paystack-checkout-link{margin:6px 0 12px;justify-content:center;text-align:center}.paystack-checkout-link:focus-visible{outline:3px solid var(--orange);outline-offset:3px}
+
+/* Keep the spacing between the team cards and the About page footer compact. */
+.about-page { padding-bottom: 0; }
+.about-page .team-section { padding-bottom: clamp(20px, 3vw, 28px); }
+.about-page + .site-footer { padding-top: clamp(24px, 4vw, 32px); }
