@@ -912,21 +912,53 @@
   $("#receipt-download").addEventListener("click", () => { if (savedReceiptOrder) downloadReceiptPdf(savedReceiptOrder); });
   // Every storefront route uses the payment-enabled checkout. Keep this guard
   // so shared startup remains resilient if a page is intentionally simplified.
+  async function openPaystackCheckout(orderNumber, button, status) {
+    if (!supabaseClient || !signedInUser || button.disabled) return false;
+    const owner = signedInUser.id;
+    const original = button.innerHTML;
+    button.parentElement.querySelectorAll(".paystack-checkout-link").forEach(link => link.remove());
+    button.hidden = false; button.disabled = true; button.textContent = "Opening Paystack…";
+    status.textContent = "Preparing your secure payment link…";
+    const controller = new AbortController();
+    let timer;
+    try {
+      const request = supabaseClient.functions.invoke("initialize-paystack-payment", {
+        body: { orderNumber }, signal: controller.signal
+      });
+      const deadline = new Promise((_,reject) => {
+        timer = setTimeout(() => { controller.abort(); reject(new Error("Payment setup is taking longer than expected. Please try again.")); },20000);
+      });
+      const {data,error} = await Promise.race([request,deadline]);
+      if (owner !== signedInUser?.id) throw new Error("Your account changed. Please reopen your order.");
+      if (error) {
+        let reason = error.message;
+        try { const details = await Promise.race([error.context?.json(),deadline]); reason = details?.error || reason; } catch (_) {}
+        throw new Error(reason || "Payment could not start.");
+      }
+      let url;
+      try { url = new URL(data?.authorizationUrl); } catch (_) { throw new Error("A valid secure payment link was not returned. Please retry."); }
+      if (url.protocol !== "https:" || url.hostname !== "checkout.paystack.com" || url.username || url.password || url.port) throw new Error("A valid secure payment link was not returned. Please retry.");
+      const link = document.createElement("a");
+      link.className = "button button-dark paystack-checkout-link";
+      link.href = url.href; link.target = "_self"; link.rel = "noreferrer";
+      link.textContent = "Open secure payment";
+      button.after(link); button.hidden = true;
+      status.textContent = "Your secure checkout is ready. If it hasn’t opened, select Open secure payment.";
+      // Keep a real, user-clickable link if a browser blocks the automatic handoff.
+      try { window.location.assign(url.href); } catch (_) {}
+      return true;
+    } catch (error) {
+      status.textContent = `${error.message || "Payment could not start."} Your order is saved. Retry here or pay from your order history; you do not need to create another order.`;
+      return false;
+    } finally {
+      clearTimeout(timer); button.disabled = false; button.innerHTML = original;
+    }
+  }
   async function startPaystackPayment() {
     if (!savedReceiptOrder || !supabaseClient) return false;
     const button = $("#pay-order-now"), status = $("#payment-start-status");
     if (!button || !status) return false;
-    button.disabled = true; button.textContent = "Opening Paystack…"; status.textContent = "Connecting to secure payment…";
-    try {
-      const { data, error } = await supabaseClient.functions.invoke("initialize-paystack-payment", { body: { orderNumber: savedReceiptOrder.orderId } });
-      if (error || !data?.authorizationUrl) throw new Error(data?.error || error?.message || "Payment could not start.");
-      window.location.assign(data.authorizationUrl);
-      return true;
-    } catch (error) {
-      button.disabled = false; button.innerHTML = 'Continue to secure payment <span>↗</span>';
-      status.textContent = `${error.message || "Payment could not start."} Your order is saved; use the button to retry or pay from your order history.`;
-      return false;
-    }
+    return openPaystackCheckout(savedReceiptOrder.orderId,button,status);
   }
   $("#pay-order-now")?.addEventListener("click", () => startPaystackPayment());
   const accountBackdrop = $("#account-backdrop");
@@ -1305,6 +1337,7 @@
 
   function renderAccountState() {
     const showAuth = !signedInUser || passwordRecoveryMode;
+    if (!signedInUser) document.querySelectorAll(".paystack-checkout-link").forEach(link => { const button=link.previousElementSibling;if(button)button.hidden=false;link.remove(); });
     const modal = $("#account-backdrop .account-modal");
     modal.classList.toggle("account-auth-mode", showAuth);
     modal.setAttribute("aria-labelledby", showAuth ? "account-title" : "account-title-signed");
@@ -1432,10 +1465,8 @@
     }
     const payButton = event.target.closest("[data-pay-order]");
     if (payButton) {
-      event.preventDefault(); event.stopPropagation(); payButton.disabled = true; payButton.textContent = "Opening Paystack…";
-      const { data, error } = await supabaseClient.functions.invoke("initialize-paystack-payment", { body: { orderNumber: payButton.dataset.payOrder } });
-      if (error || !data?.authorizationUrl) { payButton.disabled = false; payButton.textContent = "Pay securely with Paystack"; $("#orders-status").textContent = data?.error || error?.message || "Payment could not start. Please try again."; return; }
-      window.location.assign(data.authorizationUrl); return;
+      event.preventDefault(); event.stopPropagation();
+      await openPaystackCheckout(payButton.dataset.payOrder,payButton,$("#orders-status")); return;
     }
     const button = event.target.closest("[data-cancel-order]");
     if (!button) return;
