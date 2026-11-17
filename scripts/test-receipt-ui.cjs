@@ -20,6 +20,7 @@ const context = vm.createContext({
   fetch: async (url, options) => { requested = { url, options }; return { ok: true, blob: async () => new Blob(['%PDF']) }; },
   URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} }, Blob,
   document: { createElement: () => ({ click() { clicked = true; }, remove() {} }), body: { appendChild() {} } },
+  dismissPaymentNoticeAfterReceipt(order) { context.dismissedOrder = order; },
   setTimeout() {}
 });
 const start = source.indexOf('  function renderOrders()');
@@ -44,6 +45,7 @@ const button = { dataset: { receiptOrder: 'TRK-1794816000000-PAID' }, disabled: 
 (async () => {
   await history.handler({ target: { closest: selector => selector === '[data-receipt-order]' ? button : null }, preventDefault() {}, stopPropagation() {} });
   assert(clicked);
+  assert.equal(context.dismissedOrder, button.dataset.receiptOrder);
   assert.equal(requested.url, 'https://backend.test/functions/v1/customer-receipt');
   assert.equal(requested.options.headers.Authorization, 'Bearer customer-token');
   assert.equal(JSON.parse(requested.options.body).orderNumber, button.dataset.receiptOrder);

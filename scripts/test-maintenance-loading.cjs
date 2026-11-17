@@ -2,9 +2,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const source=fs.readFileSync('app.js','utf8'),elements=new Map();const $=id=>{if(!elements.has(id))elements.set(id,{hidden:true,textContent:'',querySelector:()=>({textContent:''}),setAttribute(){}});return elements.get(id);};
 const context=vm.createContext({$,signedInUser:null,verifiedAdminUserId:'',adminAccessReady:false,adminAccessVersion:0,maintenanceLoaded:true,authReady:false,manualMaintenance:true,profilePage:false,savedReceiptOrder:null,supabaseClient:null,setMobileNav(){},closeProductDetail(){},closeVariantPicker(){},closeModal(){},document:{body:{classList:{toggle(){}}},querySelector:()=>null,createElement:()=>({})}});
 vm.runInContext(source.slice(source.indexOf('  function isStoreAdmin('),source.indexOf('  async function loadMaintenanceMode(')),context);
-context.renderMaintenanceMode();assert($('#maintenance-screen').hidden,'Do not show maintenance before auth settles');
+let dashboardLink = null;
+context.document.querySelector = selector => selector === '#admin-dashboard-link' ? dashboardLink : selector === '#account-dashboard' ? { prepend(link) { dashboardLink = link; } } : null;
+context.renderMaintenanceMode();assert.equal(dashboardLink,null,'Guests must not receive an admin dashboard link');assert($('#maintenance-screen').hidden,'Do not show maintenance before auth settles');
 context.authReady=true;context.signedInUser={id:'admin'};context.renderMaintenanceMode();assert($('#maintenance-screen').hidden,'Do not show maintenance while admin lookup is pending');
-context.adminAccessReady=true;context.verifiedAdminUserId='admin';context.renderMaintenanceMode();assert($('#maintenance-screen').hidden,'Verified admin bypasses manual maintenance');
-context.signedInUser={id:'customer'};context.verifiedAdminUserId='';context.renderMaintenanceMode();assert.equal($('#maintenance-screen').hidden,false,'Visitors still see active manual maintenance');
+context.adminAccessReady=true;context.verifiedAdminUserId='admin';context.renderMaintenanceMode();assert($('#maintenance-screen').hidden,'Verified admin bypasses manual maintenance');assert.equal(dashboardLink.hidden,false,'Verified admin sees the dashboard link');
+context.signedInUser={id:'customer'};context.verifiedAdminUserId='';context.renderMaintenanceMode();assert.equal($('#maintenance-screen').hidden,false,'Visitors still see active manual maintenance');assert.equal(dashboardLink.hidden,true,'Customer must not see an old admin link');
 context.manualMaintenance=false;context.renderMaintenanceMode();assert($('#maintenance-screen').hidden);
 console.log('Maintenance loading checks passed: no startup/admin flash, manual closure preserved for visitors.');

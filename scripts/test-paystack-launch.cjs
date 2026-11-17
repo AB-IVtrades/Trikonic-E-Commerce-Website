@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const source=fs.readFileSync('app.js','utf8');let invoke,deadline,aborted=false,links=[],navigated='',owner={id:'owner'};
 const button={innerHTML:'Pay securely with Paystack',disabled:false,hidden:false,parentElement:{querySelectorAll:()=>links},after(link){link.previousElementSibling=button;links.push(link);}};
 const status={textContent:''};
-const context=vm.createContext({URL,Promise,Error,AbortController:class{signal={};abort(){aborted=true;}},signedInUser:owner,supabaseClient:{functions:{invoke:(...args)=>invoke(...args)}},setTimeout:fn=>{deadline=fn;return 1;},clearTimeout(){},document:{createElement:()=>({remove(){links=[];}})},window:{location:{assign:url=>{navigated=url;}}}});
+const context=vm.createContext({paymentPageKey:"return-page",sessionStorage:{setItem(){}},location:{pathname:"/cart.html",search:"",hash:""},URL,Promise,Error,AbortController:class{signal={};abort(){aborted=true;}},signedInUser:owner,supabaseClient:{functions:{invoke:(...args)=>invoke(...args)}},setTimeout:fn=>{deadline=fn;return 1;},clearTimeout(){},document:{createElement:()=>({remove(){links=[];}})},window:{location:{assign:url=>{navigated=url;}}}});
 vm.runInContext(source.slice(source.indexOf('  async function openPaystackCheckout('),source.indexOf('  async function startPaystackPayment(')),context);
 (async()=>{
  invoke=async(name,options)=>{assert.equal(name,'initialize-paystack-payment');assert.equal(options.body.orderNumber,'order-1');assert(options.signal);return{data:{authorizationUrl:'https://checkout.paystack.com/saved-link'}};};

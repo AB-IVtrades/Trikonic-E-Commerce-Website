@@ -14,6 +14,30 @@
   let resumeCheckoutAfterAuth = false;
   const trackedOrder = new URLSearchParams(location.search).get("track") || "";
   const paymentReturned = new URLSearchParams(location.search).get("payment") === "return";
+  // A tab-scoped return location keeps checkout in the customer's original tab/page.
+  const paymentPageKey = "trikonic-payment-page";
+  function restorePaymentPage() {
+    if (!paymentReturned) return false;
+    try {
+      const saved = sessionStorage.getItem(paymentPageKey);
+      sessionStorage.removeItem(paymentPageKey);
+      if (!saved) return false;
+      const destination = new URL(saved, location.origin);
+      const allowed = ["/", "/index.html", "/cart.html", "/shop.html", "/categories.html", "/profile.html", "/ordering.html", "/about.html", "/contact.html"];
+      if (destination.origin !== location.origin || !allowed.includes(destination.pathname)) return false;
+      const current = new URL(location.href);
+      for (const key of ["payment", "reference", "trxref"]) {
+        if (current.searchParams.has(key)) destination.searchParams.set(key, current.searchParams.get(key));
+      }
+      if (destination.href === current.href) return false;
+      location.replace(destination.href);
+      return true;
+    } catch (_) { return false; }
+  }
+  if (restorePaymentPage()) return;
+  function dismissPaymentNoticeAfterReceipt(orderNumber) {
+    if (paymentVerificationComplete && returnedOrderNumber === orderNumber) $("#payment-return-notice")?.remove();
+  }
   let verifiedAdminUserId = "";
   let adminAccessReady = false, adminAccessVersion = 0;
   let paymentVerificationRunning = false;
@@ -938,6 +962,7 @@
       let url;
       try { url = new URL(data?.authorizationUrl); } catch (_) { throw new Error("A valid secure payment link was not returned. Please retry."); }
       if (url.protocol !== "https:" || url.hostname !== "checkout.paystack.com" || url.username || url.password || url.port) throw new Error("A valid secure payment link was not returned. Please retry.");
+      try { sessionStorage.setItem(paymentPageKey, location.pathname + location.search + location.hash); } catch (_) {}
       const link = document.createElement("a");
       link.className = "button button-dark paystack-checkout-link";
       link.href = url.href; link.target = "_self"; link.rel = "noreferrer";
@@ -1458,6 +1483,7 @@
         const url = URL.createObjectURL(await response.blob());
         const link = document.createElement("a"); link.href = url; link.download = `Trikonic-${receiptButton.dataset.receiptOrder}-receipt.pdf`;
         document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+        dismissPaymentNoticeAfterReceipt(receiptButton.dataset.receiptOrder);
         $("#orders-status").textContent = "Your payment receipt has been downloaded.";
       } catch (error) { $("#orders-status").textContent = error.message || "Could not download your receipt."; }
       finally { receiptButton.disabled = false; receiptButton.textContent = "Download payment receipt (PDF)"; }
