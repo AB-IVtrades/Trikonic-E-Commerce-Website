@@ -1756,13 +1756,20 @@
     contactBackdrop.addEventListener("click", event => { if (event.target === contactBackdrop) closeContactForm(); });
     const contactMessage = $("#contact-inquiry-form [name='message']");
     contactMessage.addEventListener("input", () => { $("#contact-message-count").textContent = `${contactMessage.value.length}/500 characters`; });
+    document.querySelectorAll('[data-contact-topic="general"]').forEach(link => {
+      link.addEventListener("click", event => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        openContactForm();
+      });
+    });
     if (location.hash === "#contact-form") openContactForm();
     $("#contact-inquiry-form").addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;
       const status = $("#contact-form-status");
       const submit = $("#contact-form-submit");
-      if (!supabaseClient) { status.textContent = "We can’t send your message right now. Please email trikonic1011@gmail.com or contact us on WhatsApp."; status.classList.add("account-error"); return; }
+      if (!supabaseClient) { status.textContent = "We can’t send your message right now. Please email info@trikonicimports.com or contact us on WhatsApp."; status.classList.add("account-error"); return; }
       const values = new FormData(form);
       submit.disabled = true;
       submit.innerHTML = "Sending…";
@@ -1779,7 +1786,7 @@
         $("#contact-form-view").hidden = true;
         $("#contact-form-success").hidden = false;
       } catch (_) {
-        status.textContent = "Your message couldn’t be sent just now. Please try again, or email trikonic1011@gmail.com.";
+        status.textContent = "Your message couldn’t be sent just now. Please try again, or email info@trikonicimports.com.";
         status.classList.add("account-error");
       } finally {
         submit.disabled = false;
