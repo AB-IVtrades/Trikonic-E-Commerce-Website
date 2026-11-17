@@ -1769,7 +1769,7 @@
       const form = event.currentTarget;
       const status = $("#contact-form-status");
       const submit = $("#contact-form-submit");
-      if (!supabaseClient) { status.textContent = "We can’t send your message right now. Please email info@trikonicimports.com or contact us on WhatsApp."; status.classList.add("account-error"); return; }
+      if (!supabaseClient) { status.textContent = "We can’t send your message right now. Please email trikonicimports@gmail.com or contact us on WhatsApp."; status.classList.add("account-error"); return; }
       const values = new FormData(form);
       submit.disabled = true;
       submit.innerHTML = "Sending…";
@@ -1786,7 +1786,7 @@
         $("#contact-form-view").hidden = true;
         $("#contact-form-success").hidden = false;
       } catch (_) {
-        status.textContent = "Your message couldn’t be sent just now. Please try again, or email info@trikonicimports.com.";
+        status.textContent = "Your message couldn’t be sent just now. Please try again, or email trikonicimports@gmail.com.";
         status.classList.add("account-error");
       } finally {
         submit.disabled = false;

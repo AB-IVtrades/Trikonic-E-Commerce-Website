@@ -6,7 +6,7 @@ const allowedOrigins = new Set([
   "https://trikonicimports.com",
   "https://www.trikonicimports.com",
 ]);
-const recipient = "trikonic1011@gmail.com";
+const recipient = "trikonicimports@gmail.com";
 
 function corsHeaders(origin: string | null) {
   const headers = new Headers({
