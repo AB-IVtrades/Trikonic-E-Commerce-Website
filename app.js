@@ -1534,7 +1534,7 @@
     passwordInput.autocomplete = updatePassword ? "new-password" : "current-password";
     if (passwordField?.firstChild) passwordField.firstChild.textContent = updatePassword ? "New password" : "Password";
     $("#account-title").innerHTML = signup ? "Create your <em>account.</em>" : recovery ? "Reset your <em>password.</em>" : updatePassword ? "Choose a <em>new password.</em>" : "Welcome to <em>Trikonic.</em>";
-    $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here. If you’ve registered this email before, sign in or use Forgot password? instead." : recovery ? "We’ll email you a secure link to reset your password." : updatePassword ? "Choose a new password for your Trikonic account." : "Sign in to place order requests and keep track of them here.";
+    $("#account-intro").textContent = signup ? "Create an account to place orders, keep your bag on this device, and track requests here. If you’ve registered this email before, sign in or use Forgot password? instead." : recovery ? "We will email you a secure link to reset your password." : updatePassword ? "Choose a new password for your Trikonic account." : "Sign in to place order requests and keep track of them here.";
     $("#account-submit").innerHTML = signup ? "Create account <span>↗</span>" : recovery ? "Send reset link <span>↗</span>" : updatePassword ? "Update password <span>↗</span>" : "Sign in <span>↗</span>";
     const recoveryActions = $("#account-recovery-actions");
     if (recoveryActions) recoveryActions.hidden = !signIn;

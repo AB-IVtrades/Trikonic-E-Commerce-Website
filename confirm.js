@@ -40,7 +40,7 @@
       return;
     }
     history.replaceState(null, "", window.location.pathname);
-    setState("success", 'Your email is <em>confirmed.</em>', "Your Trikonic account is ready. You can now sign in and keep track of your order requests.", "You’re on the official Trikonic Imports site. We’ll never ask you to send us your password.", "✓");
+    setState("success", 'Your email is <em>confirmed.</em>', "Your Trikonic account is ready. You can now sign in and keep track of your order requests.", "You’re on the official Trikonic Imports site. We will never ask you to send us your password.", "✓");
   }).catch(() => {
     setState("error", 'This link needs a <em>fresh start.</em>', "We couldn’t use this confirmation link. It may have expired or already been used.", "Return to Trikonic, sign in if your account is active, or create a new account to request another confirmation email.", "!");
   });
