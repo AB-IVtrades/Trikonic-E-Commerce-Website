@@ -439,6 +439,7 @@ select:hover{border-color:var(--ink)}
 .ordering-details .payment-info{border-color:var(--ink)}
 .team-photo,.team-photo-placeholder{width:100%;height:auto;aspect-ratio:1}
 .team-photo{display:block;object-fit:cover}
+.team-photo-top{object-position:center top}
 .team-photo-placeholder{background:#0b426b;color:var(--white)}
 .team-photo-placeholder > span{background:var(--orange)}
 
