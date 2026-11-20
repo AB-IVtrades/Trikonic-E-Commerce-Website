@@ -25,12 +25,30 @@
   if(order.payment_status==='paid')return 'Recorded as paid. No Paystack verification is recorded in this audit history; this may be a historical payment.';
   return 'No successful Paystack payment is recorded in this audit history.';
  }
- function clearPrivateView(){invoices.clear();catalog.clear();epoch++;$('#workspace').hidden=true;$('#detail').hidden=true;$('#orders-body').replaceChildren();$('#shipment-list').replaceChildren();$('#detail-content').replaceChildren();currentOrder=null;listedShipments=[];availableShipments=[];}
+ let verifiedSessionKey = null;
+ let authBootTimer;
+
+ function adminSessionKey(session) {
+  if (!session?.user?.id || !session.access_token) return null;
+  try {
+   const payload = session.access_token.split('.')[1];
+   const claims = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+   if (typeof claims.session_id !== 'string' || claims.sub !== session.user.id || claims.aal !== 'aal2') return null;
+   return JSON.stringify([claims.sub, claims.session_id, claims.app_metadata?.store_role, session.user.app_metadata?.store_role]);
+  } catch {
+   return null;
+  }
+ }
+
+ function clearPrivateView(){invoices.clear();verifiedSessionKey=null;catalog.clear();epoch++;$('#workspace').hidden=true;$('#detail').hidden=true;$('#orders-body').replaceChildren();$('#shipment-list').replaceChildren();$('#detail-content').replaceChildren();currentOrder=null;listedShipments=[];availableShipments=[];}
  async function boot(){
-  clearPrivateView();const seq=epoch;$('#login').hidden=true;$('#mfa').hidden=true;
-  const {data:{session}}=await client.auth.getSession();if(seq!==epoch)return;user=session?.user||null;$('#signout').hidden=!user;
-  if(!user){$('#login').hidden=false;message('Sign in to manage orders.');return;}
+  const seq=epoch;
   try{
+   const {data:{session},error}=await client.auth.getSession();
+   if(seq!==epoch)return;
+   if(error)throw error;
+   user=session?.user||null;$('#signout').hidden=!user;
+   if(!user){$('#login').hidden=false;message('Sign in to manage orders.');return;}
    const active=await client.rpc('is_current_session_active');if(seq!==epoch)return;
    if(active.error)throw new Error('Could not verify your sign-in. Please refresh and try again.');
    if(active.data!==true){user=null;clearPrivateView();$('#login').hidden=false;await client.auth.signOut({scope:'local'});return;}
@@ -39,6 +57,7 @@
     $('#mfa').hidden=false;const {data,error}=await client.auth.mfa.listFactors();if(error)throw error;if(seq!==epoch)return;
     const verified=data.totp.find(f=>f.status==='verified');factorId=verified?.id||'';$('#enroll').hidden=Boolean(verified);$('#mfa-form').hidden=!verified;$('#qr').hidden=true;message(verified?'Enter your authenticator code.':'Set up an authenticator app to protect customer information.');return;
    }
+   verifiedSessionKey=adminSessionKey(session);
    $('#workspace').hidden=false;showView(currentView);$('#mfa').hidden=true;message(`Administrator verified · Paystack ${access.paymentMode} mode.`);await refreshView();
   }catch(e){if(seq===epoch)message(e.message,true);}
  }
@@ -52,7 +71,7 @@
  }));
  $('#mfa-form').addEventListener('submit',e=>{e.preventDefault();run(e.submitter,async()=>{
   const form=e.currentTarget;const code=new FormData(form).get('code');const {data,error}=await client.auth.mfa.challenge({factorId});if(error)throw error;
-  const verified=await client.auth.mfa.verify({factorId,challengeId:data.id,code});if(verified.error)throw verified.error;$('#qr').src='';form.reset();await boot();
+  const verified=await client.auth.mfa.verify({factorId,challengeId:data.id,code});if(verified.error)throw verified.error;$('#qr').src='';form.reset();queueAdminBoot();
  });});
  function pageControls(target,page,total,kind){$(target).innerHTML=`<button data-page-kind="${kind}" data-page="${page-1}" ${page===1?'disabled':''}>Previous</button><span>Page ${page} · ${total} records</span><button data-page-kind="${kind}" data-page="${page+1}" ${page*25>=total?'disabled':''}>Next</button>`;}
  async function loadOrders(){
@@ -125,8 +144,55 @@
   if(button.dataset.unassign)run(button,async()=>{const shipment=listedShipments.find(s=>s.id===button.dataset.shipment);await api('admin-shipments',{action:'unassign',shipment_id:shipment.id,version:shipment.version,allocation_id:button.dataset.unassign});await loadShipments();});
  });
  $('#delivery-filter').insertAdjacentHTML('beforeend',[...stages,'Order Cancelled'].map(stage=>`<option>${esc(stage)}</option>`).join(''));
- let checkingDevice=false;
- async function checkDevice(){if(!user||checkingDevice||document.visibilityState==='hidden')return;checkingDevice=true;const owner=user.id;try{const token=(await client.auth.getSession()).data.session?.access_token;const {data,error}=await client.rpc('is_current_session_active');if(!error&&data===false&&user?.id===owner&&(await client.auth.getSession()).data.session?.access_token===token){clearPrivateView();await client.auth.signOut({scope:'local'});}}catch{}finally{checkingDevice=false;}}
- window.addEventListener('focus',checkDevice);window.addEventListener('pageshow',()=>{clearPrivateView();boot();});document.addEventListener('visibilitychange',checkDevice);setInterval(checkDevice,60000);
- client.auth.onAuthStateChange(()=>{clearPrivateView();setTimeout(boot,0);});boot();
+ let checkingDevice = false;
+
+ async function checkDevice() {
+  if (!user || checkingDevice || document.visibilityState === 'hidden') return;
+  checkingDevice = true;
+  const checkEpoch = epoch;
+  try {
+   const { data: { session }, error: sessionError } = await client.auth.getSession();
+   if (sessionError || checkEpoch !== epoch) return;
+   if (!session || (verifiedSessionKey && adminSessionKey(session) !== verifiedSessionKey)) {
+    queueAdminBoot();
+    return;
+   }
+   const { data, error } = await client.rpc('is_current_session_active');
+   if (error || data !== false || checkEpoch !== epoch) return;
+   const latest = (await client.auth.getSession()).data.session;
+   if (checkEpoch === epoch && latest?.access_token === session.access_token) {
+    clearPrivateView();
+    await client.auth.signOut({ scope: 'local' });
+   }
+  } catch {
+   // A temporary network failure must not discard edits in the workspace.
+  } finally {
+   checkingDevice = false;
+  }
+ }
+
+ function queueAdminBoot() {
+  if (authBootTimer !== undefined) return;
+  clearPrivateView();
+  $('#login').hidden = true;
+  $('#mfa').hidden = true;
+  authBootTimer = setTimeout(() => {
+   authBootTimer = undefined;
+   void boot();
+  }, 0);
+ }
+
+ function handleAdminAuthChange(event, session) {
+  if (event === 'INITIAL_SESSION') return; // The initial boot checks the restored session.
+  const key = adminSessionKey(session);
+  if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && key && key === verifiedSessionKey) return;
+  queueAdminBoot();
+ }
+
+ window.addEventListener('focus', checkDevice);
+ window.addEventListener('pageshow', checkDevice);
+ document.addEventListener('visibilitychange', checkDevice);
+ setInterval(checkDevice, 60000);
+ client.auth.onAuthStateChange(handleAdminAuthChange);
+ queueAdminBoot();
 })();
