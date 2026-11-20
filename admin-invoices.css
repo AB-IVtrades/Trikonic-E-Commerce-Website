@@ -1,0 +1,89 @@
+#invoice-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #d9e0e6;
+  border-radius: 8px;
+}
+#invoice-form legend { padding-inline: 6px; font-weight: 700; }
+.invoice-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
+}
+#invoice-form label small { margin: 0; font-weight: 400; }
+#invoice-form textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #bcc8d2;
+  border-radius: 5px;
+  font: inherit;
+  resize: vertical;
+}
+.invoice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+.invoice-catalogue { flex: 1 1 255px; min-width: 0; }
+.invoice-actions button, .invoice-line button { min-height: 48px; }
+.invoice-hint { color: #536879; font-size: 14px; }
+.invoice-line {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(65px, .75fr) minmax(115px, 1.2fr) minmax(100px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #d9e0e6;
+}
+.invoice-line input { min-width: 0; width: 100%; }
+.invoice-line output { display: flex; align-items: center; min-height: 48px; overflow-wrap: anywhere; }
+.invoice-footer { border-top: 1px solid #d9e0e6; padding-top: 16px; }
+.invoice-totals { display: grid; gap: 8px; margin-right: auto; }
+.invoice-totals output { margin-left: .4em; }
+#invoice-error { margin: 0; }
+#invoice-print { display: none; }
+
+@media (max-width: 720px) {
+  .invoice-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .invoice-line > :first-child { grid-column: 1 / -1; }
+  .invoice-totals { flex-basis: 100%; }
+}
+
+@media print {
+  @page { size: A4; margin: 14mm; }
+  body:has(#workspace:not([hidden]) #invoices:not([hidden]) #invoice-print:not([hidden])),
+  html:has(#workspace:not([hidden]) #invoices:not([hidden]) #invoice-print:not([hidden])) {
+    background: white;
+    color: #111;
+  }
+  body:has(#workspace:not([hidden]) #invoices:not([hidden]) #invoice-print:not([hidden])) > :not(main),
+  #workspace:has(#invoices:not([hidden]) #invoice-print:not([hidden])) > :not(#invoices),
+  main:has(#workspace:not([hidden]) #invoices:not([hidden]) #invoice-print:not([hidden])) > :not(#workspace),
+  #invoices:has(#invoice-print:not([hidden])) > :not(#invoice-print) { display: none !important; }
+  main:has(#workspace:not([hidden]) #invoices:not([hidden]) #invoice-print:not([hidden])) { margin: 0; padding: 0; }
+  #invoice-print:not([hidden]) { display: block; font-size: 11pt; overflow-wrap: anywhere; }
+  .invoice-print-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #0b3154;
+    padding-bottom: 12px;
+    color: #0b3154;
+  }
+  .invoice-print-heading > div { display: grid; gap: 4px; }
+  .invoice-print-heading > div:last-child { text-align: right; }
+  .invoice-print-heading h2 { margin: 0; font-size: 24pt; }
+  .invoice-print-address { margin-bottom: 18px; }
+  #invoice-print th, #invoice-print td { padding: 8px; font-size: 10pt; }
+  #invoice-print th:nth-child(n+2), #invoice-print td:nth-child(n+2) { text-align: right; white-space: nowrap; }
+  #invoice-print tr, .invoice-print-heading, .invoice-print-totals { break-inside: avoid; }
+  .invoice-print-totals { width: fit-content; min-width: 40%; margin: 14px 0 14px auto; }
+  .invoice-print-totals div { display: flex; justify-content: space-between; gap: 20px; padding: 5px 8px; }
+  .invoice-print-totals div:last-child { font-weight: 700; border-top: 1px solid #0b3154; }
+  .invoice-print-totals dd { margin: 0; }
+  #invoice-print-contact, #invoice-print-notes { white-space: pre-wrap; }
+}
