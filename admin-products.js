@@ -1,6 +1,7 @@
 (() => {
   const byId = id => document.getElementById(id);
   const catalogueMoney = value => new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS' }).format(value);
+  const usdPrice = new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'USD', currencyDisplay: 'code' });
   const lines = value => value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const options = value => [...new Set(value.split(/[,;\n]/).map(item => item.trim()).filter(Boolean))];
   const normalize = value => String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -111,15 +112,17 @@
 
     function preview() {
       const hair = isHair(value('category'));
+      const currency = value('currency');
+      byId('catalog-selling-label').textContent = `Selling price (${currency}) *`;
+      byId('catalog-sale-label').textContent = `Sale price (${currency})`;
       byId('catalog-size-label').textContent = hair ? 'Hair lengths' : 'Sizes';
       byId('catalog-type-label').textContent = hair ? 'Closure sizes' : 'Product types';
       field('sizes').placeholder = hair ? '12 inches, 14 inches' : 'S, M, L';
       field('types').placeholder = hair ? '2 x 4, 4 x 4' : 'Standard, Deluxe';
-      byId('catalog-variant-hint').textContent = hair
-        ? 'Separate entries with a comma or a new line. Use the selling currency. Example: 14 inches | 4 x 4: 45'
-        : 'Separate entries with a comma or a new line. Use the selling currency. Example: Black | M: 25';
-      const regular = currencies(number('price'), value('currency'));
-      const sale = currencies(number('sale'), value('currency'));
+      const variantExample = hair ? '14 inches | 4 x 4: 45' : 'Black | M: 25';
+      byId('catalog-variant-hint').textContent = `Enter prices in ${currency}. Separate entries with a comma or a new line. Example: ${variantExample}`;
+      const regular = currencies(number('price'), currency);
+      const sale = currencies(number('sale'), currency);
       const shipping = currencies(number('shipping') ?? 0, number('shipping') == null ? 'GHS' : value('shippingCurrency'));
       const cost = currencies(number('cost'), value('costCurrency'));
       const current = field('flashSale').checked && sale > 0 && sale < regular ? sale : regular;
@@ -127,7 +130,7 @@
       if ((number('price') != null && regular == null) || shipping == null) {
         summary = 'Save the USD to GHS exchange rate to preview this price.';
       } else if (current != null) {
-        summary = 'Base selection: ' + catalogueMoney(current) + ' item + ' + catalogueMoney(shipping) +
+        summary = 'Storefront price: ' + catalogueMoney(current) + ' item + ' + catalogueMoney(shipping) +
           ' shipping = ' + catalogueMoney(current + shipping) + ' for one unit.';
         if (current < regular) summary += ' Regular item price ' + catalogueMoney(regular) + '.';
         if (cost != null) summary += ' Estimated item profit before shipping and fees: ' + catalogueMoney(current - cost) + '.';
@@ -141,7 +144,7 @@
       try {
         const variants = parseVariants(value('variants'), options(value('colors')), options(value('sizes')), options(value('types')), hair);
         for (const variant of variants) {
-          const variantPrice = currencies(variant.price, value('currency'));
+          const variantPrice = currencies(variant.price, currency);
           if (variantPrice == null) return;
           const itemPrice = field('flashSale').checked && sale > 0 && sale < variantPrice ? sale : variantPrice;
           const row = document.createElement('li');
@@ -176,8 +179,14 @@
         row.insertCell().textContent = item.category;
         const regular = currencies(item.price, item.currency);
         const sale = currencies(item.sale_price, item.currency);
-        row.insertCell().textContent = regular == null ? item.currency + ' ' + item.price
-          : catalogueMoney(item.flash_sale && sale > 0 && sale < regular ? sale : regular);
+        const onSale = item.flash_sale && sale > 0 && sale < regular;
+        const priceCell = row.insertCell();
+        priceCell.textContent = regular == null ? usdPrice.format(item.price) : catalogueMoney(onSale ? sale : regular);
+        if (item.currency === 'USD' && regular != null) {
+          const sourcePrice = document.createElement('small');
+          sourcePrice.textContent = usdPrice.format(onSale ? item.sale_price : item.price);
+          priceCell.append(sourcePrice);
+        }
         row.insertCell().textContent = item.listed ? 'Published' : 'Hidden';
         const edit = document.createElement('button');
         edit.type = 'button';
