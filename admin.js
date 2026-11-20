@@ -1,6 +1,6 @@
 (() => {
  const $=s=>document.querySelector(s),config=window.TRikonicSupabaseConfig,client=window.supabase.createClient(config.url,config.publishableKey);
- const invoices = window.createAdminInvoices(config.url + '/functions/v1/public-catalog');
+ const invoices = window.createAdminInvoices(config.url + '/functions/v1/public-catalog', client);
  const catalog = window.createAdminCatalog(client);
  const stages=['Order Received','Payment Made','Order Placed','Order Shipped','Order Arrived in Ghana','Order Arrived at Warehouse','Order Ready for Collection','Order Delivered'];
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

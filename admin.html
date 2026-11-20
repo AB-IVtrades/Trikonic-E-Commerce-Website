@@ -50,11 +50,11 @@
       <fieldset>
         <legend>Pricing</legend>
         <div class="catalog-fields">
-          <label>Selling currency<select name="currency"><option value="USD" selected>USD · US dollars</option><option value="GHS">GHS · Ghana cedis</option></select></label>
-          <label><span id="catalog-selling-label">Selling price (USD) *</span><input name="price" type="number" min="0.01" max="10000000" step="any" required></label>
+          <label>Selling price *<input name="price" type="number" min="0.01" max="10000000" step="any" required></label>
+          <label>Selling currency<select name="currency"><option>GHS</option><option>USD</option></select></label>
           <label>Shipping fee<input name="shipping" type="number" min="0" max="10000000" step="any" placeholder="Optional"></label>
           <label>Shipping currency<select name="shippingCurrency"><option>GHS</option><option>USD</option></select></label>
-          <label><span id="catalog-sale-label">Sale price (USD)</span><input name="sale" type="number" min="0.01" max="10000000" step="any" placeholder="Optional"></label>
+          <label>Sale price <small>Uses the selling currency.</small><input name="sale" type="number" min="0.01" max="10000000" step="any" placeholder="Optional"></label>
           <label class="check"><input name="flashSale" type="checkbox">Enable flash sale</label>
           <label class="catalog-wide">Variant prices <small id="catalog-variant-hint">Separate entries with a comma or a new line. Use the selling currency. Example: Black | M: 25</small><textarea name="variants" rows="4" maxlength="24000"></textarea></label>
           <label>Estimated buying cost <small>Optional and private.</small><input name="cost" type="number" min="0" max="10000000" step="any"></label>
@@ -88,6 +88,7 @@
       <label>Contact or billing address <small>Optional</small><textarea name="contact" maxlength="500" rows="2"></textarea></label>
       <label>Invoice number<input name="number" maxlength="64" required></label>
       <label>Invoice date<input name="date" type="date" required></label>
+      <label>Invoice currency<select name="currency"><option value="GHS">GHS · Ghana cedis</option><option value="USD">USD · US dollars</option></select></label>
     </div>
 
     <fieldset>
@@ -101,12 +102,12 @@
         <button type="button" id="invoice-add-line" class="secondary">Add manual item</button>
       </div>
       <small id="invoice-catalogue-status" role="status"></small>
-      <p class="invoice-hint">Edit item prices in GHS. Enter any delivery charge separately.</p>
+      <p id="invoice-rate" class="invoice-hint" role="status">Enter item prices and delivery in the invoice currency.</p>
       <div id="invoice-lines"></div>
     </fieldset>
 
     <div class="invoice-fields">
-      <label>Delivery fee (GHS)<input name="delivery" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" value="0"></label>
+      <label><span id="invoice-delivery-label">Delivery fee (GHS)</span><input name="delivery" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" value="0"></label>
       <label>Notes or payment instructions <small>Optional</small><textarea name="notes" maxlength="1000" rows="2"></textarea></label>
     </div>
     <div class="invoice-actions invoice-footer">
@@ -124,7 +125,7 @@
     <div class="invoice-line">
       <label>Item or description<input data-invoice-item maxlength="260" required></label>
       <label>Quantity<input data-invoice-quantity type="number" min="1" max="10000" step="1" inputmode="numeric" value="1" required></label>
-      <label>Unit price (GHS)<input data-invoice-price type="number" min="0" max="10000000" step="0.01" inputmode="decimal" required></label>
+      <label><span data-invoice-price-label>Unit price (GHS)</span><input data-invoice-price type="number" min="0" max="10000000" step="0.01" inputmode="decimal" required></label>
       <label>Line total<output data-invoice-line-total>—</output></label>
       <button type="button" class="secondary" data-invoice-remove aria-label="Remove item">Remove</button>
     </div>
@@ -161,4 +162,4 @@
   </article>
 </section>
 <section id="detail" class="panel" hidden><button id="close-detail" class="secondary">Close order details</button><div id="detail-content"></div></section></section></main>
-<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=usd-pricing-20261120"></script><script defer src="admin-invoices.js?v=1"></script><script defer src="admin.js?v=products-invoices-20261120"></script></body></html>
+<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=currency-20261120"></script><script defer src="admin.js?v=invoice-currency-20261120"></script></body></html>
