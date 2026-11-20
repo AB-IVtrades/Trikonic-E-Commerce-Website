@@ -1,6 +1,7 @@
 (() => {
  const $=s=>document.querySelector(s),config=window.TRikonicSupabaseConfig,client=window.supabase.createClient(config.url,config.publishableKey);
  const invoices = window.createAdminInvoices(config.url + '/functions/v1/public-catalog');
+ const catalog = window.createAdminCatalog(client);
  const stages=['Order Received','Payment Made','Order Placed','Order Shipped','Order Arrived in Ghana','Order Arrived at Warehouse','Order Ready for Collection','Order Delivered'];
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=n=>`GH₵${Number(n).toFixed(2)}`,stamp=v=>new Date(v).toLocaleString('en-GH',{timeZone:'Africa/Accra'});
@@ -24,7 +25,7 @@
   if(order.payment_status==='paid')return 'Recorded as paid. No Paystack verification is recorded in this audit history; this may be a historical payment.';
   return 'No successful Paystack payment is recorded in this audit history.';
  }
- function clearPrivateView(){invoices.clear();epoch++;$('#workspace').hidden=true;$('#detail').hidden=true;$('#orders-body').replaceChildren();$('#shipment-list').replaceChildren();$('#detail-content').replaceChildren();currentOrder=null;listedShipments=[];availableShipments=[];}
+ function clearPrivateView(){invoices.clear();catalog.clear();epoch++;$('#workspace').hidden=true;$('#detail').hidden=true;$('#orders-body').replaceChildren();$('#shipment-list').replaceChildren();$('#detail-content').replaceChildren();currentOrder=null;listedShipments=[];availableShipments=[];}
  async function boot(){
   clearPrivateView();const seq=epoch;$('#login').hidden=true;$('#mfa').hidden=true;
   const {data:{session}}=await client.auth.getSession();if(seq!==epoch)return;user=session?.user||null;$('#signout').hidden=!user;
@@ -38,7 +39,7 @@
     $('#mfa').hidden=false;const {data,error}=await client.auth.mfa.listFactors();if(error)throw error;if(seq!==epoch)return;
     const verified=data.totp.find(f=>f.status==='verified');factorId=verified?.id||'';$('#enroll').hidden=Boolean(verified);$('#mfa-form').hidden=!verified;$('#qr').hidden=true;message(verified?'Enter your authenticator code.':'Set up an authenticator app to protect customer information.');return;
    }
-   $('#workspace').hidden=false;$('#invoices').hidden=currentView!=='invoices';$('#mfa').hidden=true;message(`Administrator verified · Paystack ${access.paymentMode} mode.`);await refreshView();
+   $('#workspace').hidden=false;showView(currentView);$('#mfa').hidden=true;message(`Administrator verified · Paystack ${access.paymentMode} mode.`);await refreshView();
   }catch(e){if(seq===epoch)message(e.message,true);}
  }
  $('#login-form').addEventListener('submit',e=>{e.preventDefault();run(e.submitter,async()=>{const form=e.currentTarget;const values=new FormData(form);const {error}=await client.auth.signInWithPassword({email:values.get('email'),password:values.get('password')});if(error)throw error;form.reset();});});
@@ -83,21 +84,31 @@
   $('#shipment-list').innerHTML=listedShipments.map(s=>`<article class="shipment"><h2>${esc(s.label)}</h2><p>${esc(stages[s.stage])}${s.tracking_code?` · ${esc(s.tracking_code)}`:''}</p><ul>${s.items.map(i=>`<li>${esc(i.order_number)} · ${i.quantity} × ${esc(i.name)} ${s.stage===2?`<button class="secondary" data-unassign="${esc(i.id)}" data-shipment="${esc(s.id)}">Unassign</button>`:''}</li>`).join('')||'<li>No items assigned yet. Open an order to assign its items.</li>'}</ul>${s.stage<7?`<div class="shipment-actions"><label>Move shipment to<select id="stage-${esc(s.id)}">${stages.map((label,index)=>index>s.stage?`<option value="${index}">${esc(label)}</option>`:'').join('')}</select></label><button data-advance="${esc(s.id)}" ${!s.items.length?'disabled':''}>Update all linked items</button></div>`:'<span class="badge">Delivered</span>'}</article>`).join('')||'<p>No shipments match.</p>';
   pageControls('#shipment-pages',shipmentPage,Number(listedShipments[0]?.total_count||0),'shipments');
  }
- async function refreshView(){if(currentView==='invoices'){await invoices.load();return;}if(currentView==='orders')await loadOrders();else await loadShipments();}
+ const views = {
+  orders: { panel: 'orders', load: loadOrders },
+  shipments: { panel: 'shipments', load: loadShipments },
+  products: { panel: 'products-admin', load: catalog.load },
+  invoices: { panel: 'invoices', load: invoices.load }
+ };
+ function showView(view) {
+  currentView = view;
+  for (const [name, { panel }] of Object.entries(views)) {
+   $(`#${panel}`).hidden = name !== view;
+   $(`#${name}-tab`).setAttribute('aria-current', name === view ? 'true' : 'false');
+  }
+  if (view !== 'orders') $('#detail').hidden = true;
+ }
+ async function refreshView() { await views[currentView].load(); }
  $('#filters').addEventListener('submit',e=>{e.preventDefault();orderPage=1;run(e.submitter,loadOrders);});
  $('#shipment-search').addEventListener('submit',e=>{e.preventDefault();shipmentSearch=new FormData(e.currentTarget).get('search');shipmentPage=1;run(e.submitter,loadShipments);});
  $('#shipment-create').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;run(e.submitter,async()=>{const values=new FormData(form);await api('admin-shipments',{action:'create_shipment',label:values.get('label'),tracking_code:values.get('tracking_code')});form.reset();shipmentPage=1;await loadShipments();});});
- $('#orders-tab').addEventListener('click',()=>{$('#invoices').hidden=true;currentView='orders';$('#orders').hidden=false;$('#shipments').hidden=true;run($('#orders-tab'),loadOrders);});
- $('#shipments-tab').addEventListener('click',()=>{$('#invoices').hidden=true;currentView='shipments';$('#orders').hidden=true;$('#shipments').hidden=false;$('#detail').hidden=true;run($('#shipments-tab'),loadShipments);});
- $('#invoices-tab').addEventListener('click',()=>{
-  currentView='invoices';
-  for(const id of ['orders','shipments','detail','products-admin']){
-   const section=document.getElementById(id);
-   if(section)section.hidden=true;
-  }
-  $('#invoices').hidden=false;
-  run($('#invoices-tab'),invoices.load);
- });
+ for (const view of Object.keys(views)) {
+  const tab = $(`#${view}-tab`);
+  tab.addEventListener('click', () => {
+   showView(view);
+   run(tab, refreshView);
+  });
+ }
  $('#refresh').addEventListener('click',()=>run($('#refresh'),refreshView));$('#close-detail').addEventListener('click',()=>{$('#detail').hidden=true;currentOrder=null;});
  document.addEventListener('submit',e=>{if(e.target.id==='assign-search'){e.preventDefault();run(e.submitter,()=>findAssignable(new FormData(e.target).get('search')));}});
  document.addEventListener('click',e=>{

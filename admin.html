@@ -1,11 +1,85 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Store administration · Trikonic Imports</title><link rel="icon" href="images/trikonic-logo.svg"><link rel="stylesheet" href="admin.css?v=controls-20261116"><link rel="stylesheet" href="admin-invoices.css?v=1"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Store administration · Trikonic Imports</title><link rel="icon" href="images/trikonic-logo.svg"><link rel="stylesheet" href="admin.css?v=products-20261120"><link rel="stylesheet" href="admin-invoices.css?v=1"></head><body>
 <header><a class="brand" href="/"><img src="images/trikonic-logo.svg" alt="">trikonic <span>imports</span></a><span>Store administration</span><button id="signout" hidden>Sign out</button></header>
 <main><p id="status" role="status" aria-live="polite">Checking your sign-in…</p>
 <section id="login" class="panel narrow" hidden><h1>Admin sign in</h1><p>Use your existing store administrator account.</p><form id="login-form"><label>Email *<input name="email" type="email" autocomplete="username" required></label><label>Password *<input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form><a href="/">Back to the shop</a></section>
 <section id="mfa" class="panel narrow" hidden><h1>Protect your admin account</h1><p>An authenticator code is required before customer orders can be opened.</p><button id="enroll" hidden>Set up authenticator</button><img id="qr" alt="Scan this code using your authenticator app" hidden><form id="mfa-form" hidden><label>Authenticator code *<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><button>Verify and open dashboard</button></form><p>Keep access to your authenticator app. If you lose it, contact the account owner for account recovery.</p></section>
-<section id="workspace" hidden><nav class="tabs"><button id="orders-tab">Orders</button><button id="shipments-tab">Shipments</button><button type="button" id="invoices-tab">Invoices</button><a href="/">Visit shop / manual maintenance</a><button id="refresh">Refresh</button></nav><p class="notice">Payments are checked automatically. Update a shipment once to update all its linked items. Cancelled paid orders need refund review.</p>
+<section id="workspace" hidden><nav class="tabs"><button id="orders-tab">Orders</button><button id="shipments-tab">Shipments</button><button type="button" id="products-tab">Products</button><button type="button" id="invoices-tab">Invoices</button><a href="/">Visit shop / manual maintenance</a><button id="refresh">Refresh</button></nav><p class="notice">Payments are checked automatically. Update a shipment once to update all its linked items. Cancelled paid orders need refund review.</p>
 <section id="orders"><h1>Orders</h1><form id="filters" class="filters"><label>Search<input name="search" placeholder="Order number or customer name" maxlength="100"></label><label>Payment<select name="payment"><option value="">All payments</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="refunded">Refunded</option><option value="not_required">Not required</option></select></label><label>Delivery<select id="delivery-filter" name="status"><option value="">All stages</option></select></label><label class="check"><input type="checkbox" name="attention">Needs attention only</label><button>Apply filters</button></form><div class="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Payment</th><th>Delivery</th><th>Review</th><th></th></tr></thead><tbody id="orders-body"></tbody></table></div><div id="orders-pages" class="pages"></div></section>
 <section id="shipments" hidden><h1>Shipments</h1><form id="shipment-create" class="filters"><label>Shipment name *<input name="label" placeholder="November furniture batch" maxlength="120" required></label><label>Tracking reference (optional)<input name="tracking_code" maxlength="120"></label><button>Create shipment</button></form><form id="shipment-search" class="filters"><label>Find shipment<input name="search" maxlength="100" placeholder="Name or tracking reference"></label><button>Search</button></form><div id="shipment-list"></div><div id="shipment-pages" class="pages"></div></section>
+<section id="products-admin" hidden>
+  <div class="catalog-heading">
+    <div><h1>Products</h1><p>Manage listings and prices for the storefront.</p></div>
+    <button id="catalog-new" type="button">Add product</button>
+  </div>
+  <p id="catalog-status" role="status"></p>
+  <details class="panel catalog-rate">
+    <summary>Pricing settings</summary>
+    <form id="catalog-rate" class="filters">
+      <label>GHS per 1 USD<input name="rate" type="number" min="0.0001" max="10000" step="any" required></label>
+      <button>Save exchange rate</button>
+    </form>
+    <p>Saving the rate updates future prices for every published USD listing.</p>
+  </details>
+  <section id="catalog-editor" class="panel" hidden aria-labelledby="catalog-editor-title">
+    <div class="catalog-heading"><h2 id="catalog-editor-title" tabindex="-1">Add product</h2><button type="button" class="secondary" id="catalog-close">Close editor</button></div>
+    <form id="catalog-form">
+      <fieldset>
+        <legend>Product details</legend>
+        <div class="catalog-fields">
+          <label>SKU *<input name="sku" maxlength="120" placeholder="BAG-RAFFIA-01" required></label>
+          <label>Product name *<input name="name" maxlength="200" required></label>
+          <label>Category *<input name="category" list="catalog-categories" maxlength="120" required><datalist id="catalog-categories"></datalist></label>
+          <label>Availability<select name="availability"><option value="preorder">Pre-order</option><option value="in_stock">In stock</option><option value="out_of_stock">Out of stock</option></select></label>
+          <label>Stock quantity <small>Optional for in-stock items.</small><input name="stock" type="number" min="0" step="1" max="1000000" placeholder="Optional"></label>
+          <label>Card tag<input name="tag" maxlength="100" placeholder="Optional"></label>
+          <label>Card background<input name="color" type="color" value="#e8e4dc"></label>
+          <label class="catalog-wide">Description<textarea name="description" rows="2" maxlength="5000"></textarea></label>
+          <label class="catalog-wide">Specifications <small>One per line, e.g. Material: Raffia</small><textarea name="specs" rows="2" maxlength="10000"></textarea></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Photos and options</legend>
+        <div class="catalog-fields">
+          <label class="catalog-wide">Main photo URL <small>Required to publish. Use an HTTPS URL or a path such as images/raffia-tote.webp.</small><input name="image" maxlength="2048"></label>
+          <label class="catalog-wide">Additional photos <small>Separate photos with a comma or a new line. To link a photo to an option, use Black | images/black-bag.webp.</small><textarea name="images" rows="2" maxlength="14000"></textarea></label>
+          <label>Colours<input name="colors" maxlength="4000" placeholder="Black, White"></label>
+          <label><span id="catalog-size-label">Sizes</span><input name="sizes" maxlength="4000" placeholder="S, M, L"></label>
+          <label><span id="catalog-type-label">Product types</span><input name="types" maxlength="4000" placeholder="Standard, Deluxe"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Pricing</legend>
+        <div class="catalog-fields">
+          <label>Selling price *<input name="price" type="number" min="0.01" max="10000000" step="any" required></label>
+          <label>Selling currency<select name="currency"><option>GHS</option><option>USD</option></select></label>
+          <label>Shipping fee<input name="shipping" type="number" min="0" max="10000000" step="any" placeholder="Optional"></label>
+          <label>Shipping currency<select name="shippingCurrency"><option>GHS</option><option>USD</option></select></label>
+          <label>Sale price <small>Uses the selling currency.</small><input name="sale" type="number" min="0.01" max="10000000" step="any" placeholder="Optional"></label>
+          <label class="check"><input name="flashSale" type="checkbox">Enable flash sale</label>
+          <label class="catalog-wide">Variant prices <small id="catalog-variant-hint">Separate entries with a comma or a new line. Use the selling currency. Example: Black | M: 25</small><textarea name="variants" rows="4" maxlength="24000"></textarea></label>
+          <label>Estimated buying cost <small>Optional and private.</small><input name="cost" type="number" min="0" max="10000000" step="any"></label>
+          <label>Buying cost currency<select name="costCurrency"><option>GHS</option><option>USD</option></select></label>
+        </div>
+        <p id="catalog-price-preview" class="notice"></p>
+        <details id="catalog-variant-preview" hidden><summary>Preview variant totals</summary><ul id="catalog-variant-totals"></ul></details>
+      </fieldset>
+      <p id="catalog-save-status" role="status"></p>
+      <div class="catalog-actions">
+        <button type="submit" value="hidden" class="secondary" id="catalog-save-hidden">Save as draft</button>
+        <button type="submit" value="published">Save &amp; publish</button>
+      </div>
+    </form>
+  </section>
+  <div class="catalog-filters">
+    <label>Find a product<input id="catalog-search" type="search" placeholder="Name, SKU or category"></label>
+    <label>Visibility<select id="catalog-visibility"><option value="">All products</option><option value="published">Published</option><option value="hidden">Hidden</option></select></label>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Product</th><th scope="col">Category</th><th scope="col">Base price</th><th scope="col">Visibility</th><th scope="col">Edit</th></tr></thead>
+    <tbody id="catalog-rows"></tbody>
+  </table></div>
+  <div class="pages"><button type="button" id="catalog-prev">Previous</button><span id="catalog-page"></span><button type="button" id="catalog-next">Next</button></div>
+</section>
 <section id="invoices" hidden aria-labelledby="invoice-title">
   <h1 id="invoice-title">Make an invoice</h1>
   <form id="invoice-form" class="panel">
@@ -87,4 +161,4 @@
   </article>
 </section>
 <section id="detail" class="panel" hidden><button id="close-detail" class="secondary">Close order details</button><div id="detail-content"></div></section></section></main>
-<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-invoices.js?v=1"></script><script defer src="admin.js?v=verify-restored-session-20261116-invoices1"></script></body></html>
+<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=1"></script><script defer src="admin.js?v=products-invoices-20261120"></script></body></html>
