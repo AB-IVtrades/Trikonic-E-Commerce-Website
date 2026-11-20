@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Store administration · Trikonic Imports</title><link rel="icon" href="images/trikonic-logo.svg"><link rel="stylesheet" href="admin.css?v=products-20261120"><link rel="stylesheet" href="admin-invoices.css?v=1"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Store administration · Trikonic Imports</title><link rel="icon" href="images/trikonic-logo.svg"><link rel="stylesheet" href="admin.css?v=products-20261120"><link rel="stylesheet" href="admin-invoices.css?v=commercial-20261120"></head><body>
 <header><a class="brand" href="/"><img src="images/trikonic-logo.svg" alt="">trikonic <span>imports</span></a><span>Store administration</span><button id="signout" hidden>Sign out</button></header>
 <main><p id="status" role="status" aria-live="polite">Checking your sign-in…</p>
 <section id="login" class="panel narrow" hidden><h1>Admin sign in</h1><p>Use your existing store administrator account.</p><form id="login-form"><label>Email *<input name="email" type="email" autocomplete="username" required></label><label>Password *<input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form><a href="/">Back to the shop</a></section>
@@ -81,15 +81,49 @@
   <div class="pages"><button type="button" id="catalog-prev">Previous</button><span id="catalog-page"></span><button type="button" id="catalog-next">Next</button></div>
 </section>
 <section id="invoices" hidden aria-labelledby="invoice-title">
-  <h1 id="invoice-title">Make an invoice</h1>
+  <h1 id="invoice-title">Make a commercial invoice</h1>
   <form id="invoice-form" class="panel">
-    <div class="invoice-fields">
-      <label>Customer name<input name="customer" maxlength="160" required></label>
-      <label>Contact or billing address <small>Optional</small><textarea name="contact" maxlength="500" rows="2"></textarea></label>
-      <label>Invoice number<input name="number" maxlength="64" required></label>
-      <label>Invoice date<input name="date" type="date" required></label>
-      <label>Invoice currency<select name="currency"><option value="GHS">GHS · Ghana cedis</option><option value="USD">USD · US dollars</option></select></label>
-    </div>
+    <fieldset>
+      <legend>Seller</legend>
+      <div class="invoice-fields">
+        <label>Company name<input name="seller" maxlength="160" value="Trikonic Imports" required></label>
+        <label>Contact person<input name="sellerPerson" maxlength="120"></label>
+        <label>Email<input name="sellerEmail" type="email" maxlength="200" value="trikonicimports@gmail.com"></label>
+        <label>Phone<input name="sellerPhone" type="tel" maxlength="80" value="+233 53 902 6251"></label>
+        <label>Business address<textarea name="sellerAddress" maxlength="500" rows="2"></textarea></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Buyer and delivery</legend>
+      <div class="invoice-fields">
+        <label>Sold to<input name="customer" maxlength="160" required></label>
+        <label>Contact person<input name="buyerPerson" maxlength="120"></label>
+        <label>Email<input name="buyerEmail" type="email" maxlength="200"></label>
+        <label>Phone<input name="buyerPhone" type="tel" maxlength="80"></label>
+        <label>Billing address<textarea name="contact" maxlength="500" rows="2"></textarea></label>
+        <label>Delivery address or pickup location<textarea name="deliveryAddress" maxlength="500" rows="2"></textarea></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Invoice and terms</legend>
+      <div class="invoice-fields">
+        <label>Invoice or PI number<input name="number" maxlength="64" required></label>
+        <label>Invoice date<input name="date" type="date" required></label>
+        <label>Invoice currency<select name="currency"><option value="GHS">GHS · Ghana cedis</option><option value="USD">USD · US dollars</option></select></label>
+        <label>Payment terms<input name="paymentTerms" maxlength="250"></label>
+        <label>Trade terms (Incoterm and place)<input name="tradeTerms" maxlength="180" placeholder="DDP Tema"></label>
+        <label>Price valid until<input name="validUntil" type="date"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Bank details</legend>
+      <div class="invoice-fields">
+        <label>Bank name and branch<input name="bankName" maxlength="200"></label>
+        <label>Account holder<input name="bankHolder" maxlength="160"></label>
+        <label>Account number<input name="bankAccount" maxlength="80"></label>
+        <label>SWIFT / BIC<input name="bankSwift" maxlength="32"></label>
+      </div>
+    </fieldset>
 
     <fieldset>
       <legend>Items</legend>
@@ -106,10 +140,21 @@
       <div id="invoice-lines"></div>
     </fieldset>
 
-    <div class="invoice-fields">
-      <label><span id="invoice-delivery-label">Delivery fee (GHS)</span><input name="delivery" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" value="0"></label>
-      <label>Notes or payment instructions <small>Optional</small><textarea name="notes" maxlength="1000" rows="2"></textarea></label>
-    </div>
+    <fieldset>
+      <legend>Shipping and remarks</legend>
+      <div class="invoice-fields">
+        <label><span id="invoice-delivery-label">Shipping cost (GHS)</span><input name="delivery" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" value="0"></label>
+        <label>Remarks or payment instructions<textarea name="notes" maxlength="1000" rows="3"></textarea></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Sign-off</legend>
+      <div class="invoice-fields">
+        <label>Buyer representative<input name="buyerSigner" maxlength="120"></label>
+        <label>Seller representative<input name="sellerSigner" maxlength="120"></label>
+        <label>Company stamp <small>Optional PNG, JPEG or WebP</small><input name="stamp" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      </div>
+    </fieldset>
     <div class="invoice-actions invoice-footer">
       <div class="invoice-totals">
         <span>Subtotal <output id="invoice-subtotal">GH₵0.00</output></span>
@@ -119,11 +164,16 @@
       <button type="submit">Print invoice</button>
     </div>
     <p id="invoice-error" class="error" role="status" hidden></p>
+    <p id="invoice-print-status" class="invoice-hint" role="status" hidden></p>
   </form>
 
   <template id="invoice-line-template">
     <div class="invoice-line">
-      <label>Item or description<input data-invoice-item maxlength="260" required></label>
+      <label class="invoice-line-name">Product name<input data-invoice-item maxlength="260" required></label>
+      <label class="invoice-line-image">Product photo URL<input data-invoice-image maxlength="2048" placeholder="https://… or images/…"></label>
+      <label class="invoice-line-description">Description or dimensions<textarea data-invoice-description maxlength="500" rows="2"></textarea></label>
+      <label>Line weight (kg)<input data-invoice-weight type="number" min="0" step="any" inputmode="decimal"></label>
+      <label>Line volume (CBM)<input data-invoice-volume type="number" min="0" step="any" inputmode="decimal"></label>
       <label>Quantity<input data-invoice-quantity type="number" min="1" max="10000" step="1" inputmode="numeric" value="1" required></label>
       <label><span data-invoice-price-label>Unit price (GHS)</span><input data-invoice-price type="number" min="0" max="10000000" step="0.01" inputmode="decimal" required></label>
       <label>Line total<output data-invoice-line-total>—</output></label>
@@ -133,33 +183,33 @@
 
   <article id="invoice-print" hidden aria-label="Printable invoice">
     <div class="invoice-print-heading">
-      <div>
-        <img src="images/trikonic-logo.svg" width="44" height="44" alt="">
-        <strong>Trikonic Imports</strong>
-        <span>trikonicimports@gmail.com</span>
-      </div>
-      <div>
-        <h2>Invoice</h2>
-        <span id="invoice-print-number"></span>
-        <span id="invoice-print-date"></span>
-      </div>
+      <img src="images/trikonic-logo.svg" width="44" height="44" alt="">
+      <div><strong id="invoice-print-seller"></strong><div id="invoice-print-sellerAddress"></div><div id="invoice-print-seller-contact"></div></div>
     </div>
-    <div class="invoice-print-address">
-      <strong>Bill to</strong>
-      <div id="invoice-print-customer"></div>
-      <div id="invoice-print-contact"></div>
+    <h2>Commercial invoice</h2>
+    <div class="invoice-print-details">
+      <dl id="invoice-print-buyer" aria-label="Buyer and delivery"></dl>
+      <dl id="invoice-print-terms" aria-label="Invoice and terms"></dl>
     </div>
-    <table>
-      <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Unit price</th><th scope="col">Amount</th></tr></thead>
+    <section id="invoice-print-bank-section" class="invoice-print-bank" hidden>
+      <h3>Bank details</h3><dl id="invoice-print-bank"></dl>
+    </section>
+    <table class="invoice-print-items">
+      <colgroup><col style="width:4%"><col style="width:12%"><col style="width:16%"><col style="width:22%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:11%"></colgroup>
+      <thead><tr><th scope="col">#</th><th scope="col">Photo</th><th scope="col">Product</th><th scope="col">Description</th><th scope="col">Weight<br>(kg)</th><th scope="col">Volume<br>(CBM)</th><th scope="col">Qty</th><th scope="col">Unit price<br><span id="invoice-print-unit-currency"></span></th><th scope="col">Amount<br><span id="invoice-print-amount-currency"></span></th></tr></thead>
       <tbody id="invoice-print-lines"></tbody>
     </table>
     <dl class="invoice-print-totals">
       <div><dt>Subtotal</dt><dd id="invoice-print-subtotal"></dd></div>
-      <div id="invoice-print-delivery-row"><dt>Delivery</dt><dd id="invoice-print-delivery"></dd></div>
+      <div id="invoice-print-delivery-row"><dt>Shipping cost</dt><dd id="invoice-print-delivery"></dd></div>
       <div><dt>Total due</dt><dd id="invoice-print-total"></dd></div>
     </dl>
-    <div id="invoice-print-notes"></div>
+    <section id="invoice-print-remarks" class="invoice-print-remarks" hidden><h3>Remarks</h3><div id="invoice-print-notes"></div></section>
+    <div class="invoice-print-signatures">
+      <div><strong>Buyer signature</strong><div id="invoice-print-buyerSigner"></div></div>
+      <div><strong>Seller signature</strong><div id="invoice-print-sellerSigner"></div><div id="invoice-print-stamp"></div></div>
+    </div>
   </article>
 </section>
 <section id="detail" class="panel" hidden><button id="close-detail" class="secondary">Close order details</button><div id="detail-content"></div></section></section></main>
-<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=currency-20261120"></script><script defer src="admin.js?v=invoice-currency-20261120"></script></body></html>
+<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=commercial-20261120"></script><script defer src="admin.js?v=invoice-currency-20261120"></script></body></html>

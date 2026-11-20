@@ -10,14 +10,17 @@
     const addProduct = byId('invoice-add-product');
     const catalogueStatus = byId('invoice-catalogue-status');
     const error = byId('invoice-error');
+    const printStatus = byId('invoice-print-status');
     const money = {
       GHS: new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS' }),
       USD: new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'USD', currencyDisplay: 'code' })
     };
     const localDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Africa/Accra' });
     const printDate = new Intl.DateTimeFormat('en-GH', { dateStyle: 'long', timeZone: 'UTC' });
+    const lineMoney = new Intl.NumberFormat('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const formatMoney = amount => money[currency].format(amount / 100);
     const field = name => form.elements.namedItem(name);
+    const value = name => field(name).value.trim();
     const choices = new Map();
     const originalAmounts = new WeakMap();
     const currencyField = field('currency');
@@ -25,6 +28,8 @@
     let exchangeRate = null;
     let request;
     let loaded = false;
+    let printVersion = 0;
+    let stampUrl;
 
     function convertMinor(amount, from, to) {
       if (from === to || amount === 0) return amount;
@@ -35,6 +40,8 @@
       const line = template.content.firstElementChild.cloneNode(true);
       if (item) {
         line.querySelector('[data-invoice-item]').value = item.name;
+        line.querySelector('[data-invoice-image]').value = item.image;
+        line.querySelector('[data-invoice-description]').value = item.description;
         const input = line.querySelector('[data-invoice-price]');
         input.value = (amount / 100).toFixed(2);
         originalAmounts.set(input, { currency: 'GHS', amount: Math.round(item.price * 100) });
@@ -45,8 +52,9 @@
 
     function emptyLine() {
       return Array.from(lines.children).find(line =>
-        !line.querySelector('[data-invoice-item]').value.trim() &&
-        !line.querySelector('[data-invoice-price]').value);
+        line.querySelector('[data-invoice-quantity]').value === '1' &&
+        Array.from(line.querySelectorAll('input:not([data-invoice-quantity]), textarea'))
+          .every(input => !input.value.trim() && !input.validity.badInput));
     }
 
     function readLines() {
@@ -58,17 +66,25 @@
         const cents = price.validity.valid ? Math.round(price.valueAsNumber * 100) : 0;
         const amount = quantity.validity.valid ? quantity.valueAsNumber * cents : 0;
         line.querySelector('output').value = price.validity.valid && quantity.validity.valid ? formatMoney(amount) : '—';
-        return { name, quantity: quantity.valueAsNumber, cents, amount };
+        return { line, name, quantity: quantity.valueAsNumber, cents, amount };
       });
     }
 
-    function updateTotals() {
+    function hidePrint() {
+      printVersion++;
       print.hidden = true;
+      printStatus.hidden = true;
+      if (stampUrl) URL.revokeObjectURL(stampUrl);
+      stampUrl = undefined;
+    }
+
+    function updateTotals() {
+      hidePrint();
       error.hidden = true;
       const items = readLines();
       const subtotal = items.reduce((total, item) => total + item.amount, 0);
       const deliveryField = field('delivery');
-      byId('invoice-delivery-label').textContent = `Delivery fee (${currency})`;
+      byId('invoice-delivery-label').textContent = `Shipping cost (${currency})`;
       const delivery = deliveryField.value && deliveryField.validity.valid ? Math.round(deliveryField.valueAsNumber * 100) : 0;
       byId('invoice-subtotal').value = formatMoney(subtotal);
       byId('invoice-total').value = formatMoney(subtotal + delivery);
@@ -85,7 +101,8 @@
       field('number').value = 'INV-' + date.replaceAll('-', '') + '-' + crypto.randomUUID().slice(0, 8).toUpperCase();
       addLine();
       updateTotals();
-      for (const id of ['number', 'date', 'customer', 'contact', 'lines', 'notes']) {
+      for (const id of ['seller', 'sellerAddress', 'seller-contact', 'buyer', 'terms', 'bank', 'lines',
+        'subtotal', 'delivery', 'total', 'notes', 'buyerSigner', 'sellerSigner', 'stamp']) {
         byId('invoice-print-' + id).replaceChildren();
       }
     }
@@ -113,7 +130,11 @@
             const variantName = variant.label || [variant.color, variant.size].filter(Boolean).join(' / ');
             const name = [product.name, variantName].filter(Boolean).join(' · ');
             const label = name + ' [' + product.id + ']';
-            choices.set(label, { name, price });
+            choices.set(label, {
+              name, price,
+              image: typeof product.image === 'string' ? product.image.slice(0, 2048) : '',
+              description: typeof product.description === 'string' ? product.description.slice(0, 500) : ''
+            });
           }
         }
         for (const label of [...choices.keys()].sort((a, b) => a.localeCompare(b))) {
@@ -207,37 +228,128 @@
       updateTotals();
     }
 
-    function printInvoice(event) {
+    function printDetails(id, entries) {
+      const rows = document.createDocumentFragment();
+      for (const [label, text] of entries) {
+        if (!text) continue;
+        const row = document.createElement('div');
+        const term = document.createElement('dt');
+        const definition = document.createElement('dd');
+        term.textContent = label;
+        definition.textContent = text;
+        row.append(term, definition);
+        rows.append(row);
+      }
+      byId('invoice-print-' + id).replaceChildren(rows);
+    }
+
+    function printedImage(src, alt) {
+      const img = document.createElement('img');
+      img.alt = alt;
+      img.referrerPolicy = 'no-referrer';
+      img.src = src;
+      return img;
+    }
+
+    function decodeImage(img) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(reject, 5000);
+        img.decode().then(resolve, reject).finally(() => clearTimeout(timeout));
+      });
+    }
+
+    async function printInvoice(event) {
       event.preventDefault();
       if (byId('workspace').hidden || byId('invoices').hidden) return;
       const { items, subtotal, delivery } = updateTotals();
-      const customer = field('customer').value.trim();
-      const number = field('number').value.trim();
+      const version = printVersion;
+      for (const name of ['seller', 'customer', 'number']) {
+        if (!value(name)) return showError('Enter the seller, buyer, and invoice number.', field(name));
+      }
       const blank = items.findIndex(item => !item.name);
-      if (!customer || !number) return showError('Enter the customer name and invoice number.', field(customer ? 'number' : 'customer'));
-      if (blank >= 0) return showError('Enter a description for each item.', lines.children[blank].querySelector('input'));
+      if (blank >= 0) return showError('Enter a product name for each item.', items[blank].line.querySelector('[data-invoice-item]'));
 
+      const stampField = field('stamp');
+      const stamp = stampField.files[0];
+      if (stamp && !['image/png', 'image/jpeg', 'image/webp'].includes(stamp.type)) {
+        return showError('Choose a PNG, JPEG, or WebP image for the company stamp.', stampField);
+      }
+      const pendingImages = [];
+      const rows = document.createDocumentFragment();
+      for (const [index, item] of items.entries()) {
+        const input = attribute => item.line.querySelector(`[data-invoice-${attribute}]`);
+        const photo = input('image');
+        const row = document.createElement('tr');
+        row.insertCell().textContent = index + 1;
+        const photoCell = row.insertCell();
+        if (photo.value.trim()) {
+          let url;
+          try {
+            url = new URL(photo.value.trim(), document.baseURI);
+            if (url.protocol !== 'https:' && !(url.protocol === 'http:' && url.origin === location.origin)) throw new Error();
+          } catch {
+            return showError(`Use a valid HTTPS photo URL or site image path for item ${index + 1}.`, photo);
+          }
+          const img = printedImage(url.href, item.name);
+          photoCell.append(img);
+          pendingImages.push({ img, field: photo, message: `Could not load the photo for item ${index + 1}. Check the URL or clear the photo field.` });
+        }
+        for (const text of [item.name, input('description').value.trim(), input('weight').value, input('volume').value,
+          item.quantity, lineMoney.format(item.cents / 100), lineMoney.format(item.amount / 100)]) {
+          row.insertCell().textContent = text;
+        }
+        rows.append(row);
+      }
+      const stampSlot = byId('invoice-print-stamp');
+      stampSlot.replaceChildren();
+      if (stamp) {
+        stampUrl = URL.createObjectURL(stamp);
+        const img = printedImage(stampUrl, 'Company stamp');
+        stampSlot.append(img);
+        pendingImages.push({ img, field: stampField, message: 'Could not open the company stamp. Choose another image or clear the field.' });
+      }
+
+      const date = name => value(name) && printDate.format(new Date(value(name) + 'T00:00:00Z'));
+      printDetails('buyer', [['Sold to', value('customer')], ['Contact person', value('buyerPerson')],
+        ['Billing address', value('contact')], ['Email', value('buyerEmail')], ['Phone', value('buyerPhone')],
+        ['Delivery or pickup', value('deliveryAddress')]]);
+      printDetails('terms', [['Invoice / PI no.', value('number')], ['Date', date('date')], ['Currency', currency],
+        ['Payment terms', value('paymentTerms')], ['Trade terms', value('tradeTerms')], ['Price valid until', date('validUntil')]]);
+      const bank = [['Bank', value('bankName')], ['Account holder', value('bankHolder')],
+        ['Account number', value('bankAccount')], ['SWIFT / BIC', value('bankSwift')]];
+      printDetails('bank', bank);
+      byId('invoice-print-bank-section').hidden = bank.every(([, text]) => !text);
       const values = {
-        number,
-        date: printDate.format(new Date(field('date').value + 'T00:00:00Z')),
-        customer,
-        contact: field('contact').value.trim(),
-        notes: field('notes').value.trim(),
+        seller: value('seller'),
+        sellerAddress: value('sellerAddress'),
+        'seller-contact': ['sellerPerson', 'sellerEmail', 'sellerPhone'].map(value).filter(Boolean).join(' · '),
+        'unit-currency': currency,
+        'amount-currency': currency,
+        notes: value('notes'),
+        buyerSigner: value('buyerSigner'),
+        sellerSigner: value('sellerSigner'),
         subtotal: formatMoney(subtotal),
         delivery: formatMoney(delivery),
         total: formatMoney(subtotal + delivery)
       };
       for (const [key, value] of Object.entries(values)) byId('invoice-print-' + key).textContent = value;
-      const rows = document.createDocumentFragment();
-      for (const item of items) {
-        const row = document.createElement('tr');
-        for (const value of [item.name, item.quantity, formatMoney(item.cents), formatMoney(item.amount)]) {
-          row.insertCell().textContent = value;
-        }
-        rows.append(row);
-      }
       byId('invoice-print-lines').replaceChildren(rows);
       byId('invoice-print-delivery-row').hidden = delivery === 0;
+      byId('invoice-print-remarks').hidden = !values.notes;
+      if (pendingImages.length) {
+        printStatus.textContent = 'Preparing invoice images…';
+        printStatus.hidden = false;
+      }
+      const images = await Promise.allSettled(pendingImages.map(({ img }) => decodeImage(img)));
+      if (version !== printVersion) return;
+      printStatus.hidden = true;
+      if (byId('workspace').hidden || byId('invoices').hidden) return hidePrint();
+      const failed = images.findIndex(result => result.status === 'rejected');
+      if (failed >= 0) {
+        hidePrint();
+        const { message, field } = pendingImages[failed];
+        return showError(message, field);
+      }
       print.hidden = false;
       window.print();
     }
@@ -249,7 +361,7 @@
     });
     currencyField.addEventListener('change', switchCurrency);
     form.addEventListener('submit', printInvoice);
-    window.addEventListener('afterprint', () => { print.hidden = true; });
+    window.addEventListener('afterprint', hidePrint);
     byId('invoice-add-line').addEventListener('click', () => {
       (emptyLine() || addLine()).querySelector('input').focus();
       updateTotals();
