@@ -235,12 +235,12 @@
       const { color, size, variant } = selection;
       const { current, regular, onSale } = priceFor(product, { color, size, variant });
       const quantity = cart.get(key);
+      const shippingFee = shippingFeeFor(product);
       return {
         id: product.id, name: product.name, category: product.category, image: selectionPhoto(product, selection), color, size, variant, availability: product.availability,
         flashSale: onSale, quantity, unitPrice: current, originalUnitPrice: regular,
         lineTotal: Math.round(current * 100) * quantity / 100,
-        // Charge shipping once for this cart line, regardless of quantity.
-        shippingTotal: shippingFeeFor(product)
+        shippingTotal: shippingFee == null ? null : Math.round(shippingFee * 100) * quantity / 100
       };
     }).filter(Boolean);
   }
@@ -434,7 +434,7 @@
   }
   function shippingMarkup(product) {
     const shipping = shippingFeeFor(product);
-    return `<p class="product-shipping">${shipping == null ? "Shipping included" : shipping === 0 ? "Shipping: Free" : `Shipping: ${money(shipping)}`}</p>`;
+    return `<p class="product-shipping">${shipping == null ? "Shipping included" : shipping === 0 ? "Shipping: Free" : `Shipping per unit: ${money(shipping)}`}</p>`;
   }
   function productPurchaseMarkup(product, selection = {}) {
     return priceMarkup(product, selection) + shippingMarkup(product);
@@ -1837,7 +1837,7 @@
     submit.disabled = true; submit.textContent = "Sending…"; status.textContent = "";
     try {
       const { data: created, error: saveError } = await supabaseClient.functions.invoke("create-order", { body: {
-        orderId: order.orderId, customer: order.customer,
+        orderId: order.orderId, customer: order.customer, expectedAmount: Math.round(total * 100),
         items: items.map(item => ({ id: item.id, color: item.color, size: item.size, variant: item.variant, quantity: item.quantity, image: item.image }))
       } });
       if (saveError || !created?.order) {

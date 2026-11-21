@@ -34,6 +34,17 @@ Deno.serve(async (request) => {
       );
     }
     const checked = priceOrder(payload.items, await loadCatalog());
+    const quoteChanged = payload.expectedAmount === undefined
+      ? checked.items.some((item) =>
+        item.quantity > 1 && Boolean(item.shippingTotal)
+      )
+      : payload.expectedAmount !== checked.amount;
+    if (quoteChanged) {
+      throw new RequestError(
+        "Reload this page and review your updated total before checking out.",
+        409,
+      );
+    }
     const clean = (value: unknown, limit: number) =>
       typeof value === "string" ? value.trim().slice(0, limit) : "";
     const name = clean(payload.customer?.name, 200),

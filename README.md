@@ -45,7 +45,7 @@ Each row is one website product. Put its existing inventory SKU in column A. The
 - `Photo URL`: a publicly accessible image URL, or a repository path such as `images/raffia-tote.webp`.
 - `Availability`: choose `In Stock`, `Pre-Order`, or `Out of Stock` from the dropdown. Out-of-stock items remain visible but cannot be added to the bag, and customers can deselect or remove those items from their cart before checkout.
 - `Stock Quantity`: enter the total number of units across all colours and sizes for an in-stock product. For example, enter `8` to show “8 in stock” on the product card and detail view. Enter `0` to show “Out of stock”, or leave the cell blank to show “In stock” without a number. Pre-order items continue to show “Pre-order”. Update the count in the sheet as stock changes.
-- `Shipping Fee (USD)`: optional fee per checkout item (regardless of quantity), converted using **Pricing Settings → B2**. Leave it blank to use an existing **Shipping Fee (GHS)**. Leave both blank if shipping is included in the product price.
+- `Shipping Fee (USD)`: optional fee per unit purchased, converted using **Pricing Settings → B2**. Leave it blank to use an existing **Shipping Fee (GHS)**. Leave both blank if shipping is included in the product price.
 - `Tag` and `Card Color`: optional display styling; card color can be a hex value such as `#e5dcd0`.
 - `Show on website`: enter `TRUE` to publish that row or `FALSE` to hide it.
 - `Flash Sale`: choose `TRUE` while the item should be discounted; choose `FALSE` (or leave it off) to show its regular price.
@@ -127,7 +127,7 @@ In Paystack **Developers → API configuration** (test mode), generate a webhook
 
 The Apps Script deployment is catalog-only. Payment processing and cancellations no longer use the spreadsheet sync token. Recovery jobs handle payment checks and receipt delivery independently.
 
-Before taking real payments, complete Paystack business activation and test card/mobile-money flows, failed payments, retries, and customer tracking updates. The total charged is the item subtotal plus one shipping fee per checkout item, regardless of quantity.
+Before taking real payments, complete Paystack business activation and test card/mobile-money flows, failed payments, retries, and customer tracking updates. The total charged is the item subtotal plus each item’s shipping fee multiplied by its quantity.
 
 ### Branded payment receipts
 

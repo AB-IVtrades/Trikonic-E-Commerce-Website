@@ -192,13 +192,16 @@ export function priceOrder(requested: any[], catalog: any[]) {
       size,
       variant,
     });
-    const unitCents = Math.round(current * 100),
-      shippingTotal = shippingFeeFor(product);
+    const unitCents = Math.round(current * 100);
+    const shippingFee = shippingFeeFor(product);
+    const shippingCents = shippingFee == null
+      ? null
+      : Math.round(shippingFee * 100) * quantity;
     if (!Number.isSafeInteger(unitCents) || unitCents < 1) {
       throw new RequestError("Invalid catalog price.", 503);
     }
     const lineTotal = unitCents * quantity / 100;
-    amount += unitCents * quantity + Math.round((shippingTotal || 0) * 100);
+    amount += unitCents * quantity + (shippingCents ?? 0);
     return {
       id: product.id,
       name: product.name,
@@ -213,7 +216,7 @@ export function priceOrder(requested: any[], catalog: any[]) {
       unitPrice: unitCents / 100,
       originalUnitPrice: regular,
       lineTotal,
-      shippingTotal,
+      shippingTotal: shippingCents == null ? null : shippingCents / 100,
     };
   });
   if (!Number.isSafeInteger(amount) || amount < 1) {
