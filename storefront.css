@@ -208,3 +208,18 @@
   html:has(.catalog-refresh) { scroll-behavior: auto; }
   .catalog-refresh :is(.product-card, .product-photo *, .home-category-card, .home-category-card *, .catalog-hero-actions .button) { transition: none; animation: none; }
 }
+
+.catalog-hero-media {
+  position: relative;
+  min-width: 0;
+  min-height: min(45vw, 620px);
+}
+.catalog-hero-media picture { position: absolute; inset: 0; }
+.catalog-hero-media [data-next-frame] { visibility: hidden; }
+@media (max-width: 680px) {
+  .catalog-hero-media { min-height: 0; height: clamp(180px, 58vw, 270px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .catalog-hero-fade { animation: catalog-hero-fade-in .24s ease-out; }
+  @keyframes catalog-hero-fade-in { from { opacity: .86; } to { opacity: 1; } }
+}

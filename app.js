@@ -562,7 +562,12 @@
       filtersPanel.toggleAttribute("data-collapsed", !open);
       filterToggle.setAttribute("aria-expanded", String(open));
     };
+    const openLinkedFilters = () => {
+      if (["#shop-filters", "#categories"].includes(location.hash)) setFiltersOpen(true);
+    };
     setFiltersOpen(false);
+    openLinkedFilters();
+    window.addEventListener("hashchange", openLinkedFilters);
     filterToggle.hidden = false;
     filterToggle.addEventListener("click", () => setFiltersOpen(filtersPanel.hasAttribute("data-collapsed")));
     filtersPanel.addEventListener("keydown", event => {
