@@ -2,6 +2,7 @@
  const $=s=>document.querySelector(s),config=window.TRikonicSupabaseConfig,client=window.supabase.createClient(config.url,config.publishableKey);
  const invoices = window.createAdminInvoices(config.url + '/functions/v1/public-catalog', client);
  const catalog = window.createAdminCatalog(client);
+ const receipts = window.createAdminReceipts();
  const stages=['Order Received','Payment Made','Order Placed','Order Shipped','Order Arrived in Ghana','Order Arrived at Warehouse','Order Ready for Collection','Order Delivered'];
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=n=>`GH₵${Number(n).toFixed(2)}`,stamp=v=>new Date(v).toLocaleString('en-GH',{timeZone:'Africa/Accra'});
@@ -40,7 +41,7 @@
   }
  }
 
- function clearPrivateView(){invoices.clear();verifiedSessionKey=null;catalog.clear();epoch++;$('#workspace').hidden=true;$('#detail').hidden=true;$('#orders-body').replaceChildren();$('#shipment-list').replaceChildren();$('#detail-content').replaceChildren();currentOrder=null;listedShipments=[];availableShipments=[];}
+ function clearPrivateView(){invoices.clear();receipts.clear();verifiedSessionKey=null;catalog.clear();epoch++;$('#workspace').hidden=true;$('#detail').hidden=true;$('#orders-body').replaceChildren();$('#shipment-list').replaceChildren();$('#detail-content').replaceChildren();currentOrder=null;listedShipments=[];availableShipments=[];}
  async function boot(){
   const seq=epoch;
   try{
@@ -107,7 +108,8 @@
   orders: { panel: 'orders', load: loadOrders },
   shipments: { panel: 'shipments', load: loadShipments },
   products: { panel: 'products-admin', load: catalog.load },
-  invoices: { panel: 'invoices', load: invoices.load }
+  invoices: { panel: 'invoices', load: invoices.load },
+  receipts: { panel: 'payment-receipts' }
  };
  function showView(view) {
   currentView = view;
@@ -115,9 +117,11 @@
    $(`#${panel}`).hidden = name !== view;
    $(`#${name}-tab`).setAttribute('aria-current', name === view ? 'true' : 'false');
   }
+  $('#order-workspace-notice').hidden = !['orders', 'shipments'].includes(view);
+  $('#refresh').hidden = view === 'receipts';
   if (view !== 'orders') $('#detail').hidden = true;
  }
- async function refreshView() { await views[currentView].load(); }
+ async function refreshView() { await views[currentView].load?.(); }
  $('#filters').addEventListener('submit',e=>{e.preventDefault();orderPage=1;run(e.submitter,loadOrders);});
  $('#shipment-search').addEventListener('submit',e=>{e.preventDefault();shipmentSearch=new FormData(e.currentTarget).get('search');shipmentPage=1;run(e.submitter,loadShipments);});
  $('#shipment-create').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;run(e.submitter,async()=>{const values=new FormData(form);await api('admin-shipments',{action:'create_shipment',label:values.get('label'),tracking_code:values.get('tracking_code')});form.reset();shipmentPage=1;await loadShipments();});});

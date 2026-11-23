@@ -1,9 +1,9 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Store administration · Trikonic Imports</title><link rel="icon" href="images/trikonic-logo.svg"><link rel="stylesheet" href="admin.css?v=products-20261120"><link rel="stylesheet" href="admin-invoices.css?v=commercial-20261120"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Store administration · Trikonic Imports</title><link rel="icon" href="images/trikonic-logo.svg"><link rel="stylesheet" href="admin.css?v=products-20261120"><link rel="stylesheet" href="admin-invoices.css?v=commercial-20261120"><link rel="stylesheet" href="admin-receipts.css?v=manual-receipts-20261123"></head><body>
 <header><a class="brand" href="/"><img src="images/trikonic-logo.svg" alt="">trikonic <span>imports</span></a><span>Store administration</span><button id="signout" hidden>Sign out</button></header>
 <main><p id="status" role="status" aria-live="polite">Checking your sign-in…</p>
 <section id="login" class="panel narrow" hidden><h1>Admin sign in</h1><p>Use your existing store administrator account.</p><form id="login-form"><label>Email *<input name="email" type="email" autocomplete="username" required></label><label>Password *<input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form><a href="/">Back to the shop</a></section>
 <section id="mfa" class="panel narrow" hidden><h1>Protect your admin account</h1><p>An authenticator code is required before customer orders can be opened.</p><button id="enroll" hidden>Set up authenticator</button><img id="qr" alt="Scan this code using your authenticator app" hidden><form id="mfa-form" hidden><label>Authenticator code *<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><button>Verify and open dashboard</button></form><p>Keep access to your authenticator app. If you lose it, contact the account owner for account recovery.</p></section>
-<section id="workspace" hidden><nav class="tabs"><button id="orders-tab">Orders</button><button id="shipments-tab">Shipments</button><button type="button" id="products-tab">Products</button><button type="button" id="invoices-tab">Invoices</button><a href="/">Visit shop / manual maintenance</a><button id="refresh">Refresh</button></nav><p class="notice">Payments are checked automatically. Update a shipment once to update all its linked items. Cancelled paid orders need refund review.</p>
+<section id="workspace" hidden><nav class="tabs"><button id="orders-tab">Orders</button><button id="shipments-tab">Shipments</button><button type="button" id="products-tab">Products</button><button type="button" id="invoices-tab">Pro forma invoices</button><button type="button" id="receipts-tab">Payment receipts</button><a href="/">Visit shop / manual maintenance</a><button id="refresh">Refresh</button></nav><p class="notice" id="order-workspace-notice">Payments are checked automatically. Update a shipment once to update all its linked items. Cancelled paid orders need refund review.</p>
 <section id="orders"><h1>Orders</h1><form id="filters" class="filters"><label>Search<input name="search" placeholder="Order number or customer name" maxlength="100"></label><label>Payment<select name="payment"><option value="">All payments</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="refunded">Refunded</option><option value="not_required">Not required</option></select></label><label>Delivery<select id="delivery-filter" name="status"><option value="">All stages</option></select></label><label class="check"><input type="checkbox" name="attention">Needs attention only</label><button>Apply filters</button></form><div class="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Payment</th><th>Delivery</th><th>Review</th><th></th></tr></thead><tbody id="orders-body"></tbody></table></div><div id="orders-pages" class="pages"></div></section>
 <section id="shipments" hidden><h1>Shipments</h1><form id="shipment-create" class="filters"><label>Shipment name *<input name="label" placeholder="November furniture batch" maxlength="120" required></label><label>Tracking reference (optional)<input name="tracking_code" maxlength="120"></label><button>Create shipment</button></form><form id="shipment-search" class="filters"><label>Find shipment<input name="search" maxlength="100" placeholder="Name or tracking reference"></label><button>Search</button></form><div id="shipment-list"></div><div id="shipment-pages" class="pages"></div></section>
 <section id="products-admin" hidden>
@@ -81,7 +81,7 @@
   <div class="pages"><button type="button" id="catalog-prev">Previous</button><span id="catalog-page"></span><button type="button" id="catalog-next">Next</button></div>
 </section>
 <section id="invoices" hidden aria-labelledby="invoice-title">
-  <h1 id="invoice-title">Make a commercial invoice</h1>
+  <h1 id="invoice-title">Make a pro forma invoice</h1>
   <form id="invoice-form" class="panel">
     <fieldset>
       <legend>Seller</legend>
@@ -107,7 +107,7 @@
     <fieldset>
       <legend>Invoice and terms</legend>
       <div class="invoice-fields">
-        <label>Invoice or PI number<input name="number" maxlength="64" required></label>
+        <label>Pro forma invoice number<input name="number" maxlength="64" required></label>
         <label>Invoice date<input name="date" type="date" required></label>
         <label>Invoice currency<select name="currency"><option value="GHS">GHS · Ghana cedis</option><option value="USD">USD · US dollars</option></select></label>
         <label>Payment terms<input name="paymentTerms" maxlength="250"></label>
@@ -186,7 +186,7 @@
       <img src="images/trikonic-logo.svg" width="44" height="44" alt="">
       <div><strong id="invoice-print-seller"></strong><div id="invoice-print-sellerAddress"></div><div id="invoice-print-seller-contact"></div></div>
     </div>
-    <h2>Commercial invoice</h2>
+    <h2>Pro forma invoice</h2>
     <div class="invoice-print-details">
       <dl id="invoice-print-buyer" aria-label="Buyer and delivery"></dl>
       <dl id="invoice-print-terms" aria-label="Invoice and terms"></dl>
@@ -211,5 +211,61 @@
     </div>
   </article>
 </section>
+<section id="payment-receipts" hidden aria-labelledby="payment-receipts-title">
+  <h1 id="payment-receipts-title">Payment receipts</h1>
+  <p>Issue a receipt after you confirm a payment received outside the website.</p>
+  <form id="manual-receipt-form" class="panel">
+    <fieldset>
+      <legend>Receipt and customer</legend>
+      <div class="receipt-fields">
+        <label>Receipt number<input name="number" maxlength="64" required></label>
+        <label>Date received<input name="paidOn" type="date" required></label>
+        <label>Customer name<input name="customer" maxlength="160" required></label>
+        <label>Customer contact <small>Optional</small><input name="contact" maxlength="200"></label>
+        <label>Order or pro forma invoice number <small>Optional</small><input name="orderReference" maxlength="80"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Payment received</legend>
+      <div class="receipt-fields">
+        <label>Amount received<input name="amount" type="number" min="0.01" max="100000000" step="0.01" inputmode="decimal" required></label>
+        <label>Currency<select name="currency"><option value="GHS">GHS · Ghana cedis</option><option value="USD">USD · US dollars</option></select></label>
+        <label>Payment method<select name="method" required><option value="">Choose a method</option><option>Mobile money</option><option>Bank transfer</option><option>Cash</option><option>Card in person</option><option>Other</option></select></label>
+        <label>Transaction reference <small>Optional</small><input name="paymentReference" maxlength="100"></label>
+        <label>Received by <small>Optional</small><input name="receivedBy" maxlength="120"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Goods and estimated arrival</legend>
+      <div class="receipt-fields">
+        <label>Goods covered <small>Enter products and quantities</small><textarea name="goods" rows="4" maxlength="1800" required></textarea></label>
+        <label>Estimated arrival (ETA) <small>Enter a date or range</small><input name="eta" maxlength="200" placeholder="e.g. 15–22 January 2027"></label>
+        <label>Notes <small>Optional</small><textarea name="notes" rows="4" maxlength="1000"></textarea></label>
+      </div>
+    </fieldset>
+    <p id="manual-receipt-status" class="error" role="status" hidden></p>
+    <div class="receipt-actions">
+      <button id="manual-receipt-new" type="button" class="secondary">New receipt</button>
+      <button type="submit">Print or save PDF</button>
+    </div>
+  </form>
+
+  <article id="manual-receipt-print" aria-label="Printable payment receipt" hidden>
+    <div class="manual-receipt-brand">
+      <img src="images/trikonic-logo.svg" width="46" height="46" alt="">
+      <div><strong>Trikonic Imports</strong><div>trikonicimports.com · +233 53 902 6251</div></div>
+    </div>
+    <h2>Payment receipt</h2>
+    <div class="manual-receipt-paid"><strong>Payment received</strong><span id="manual-receipt-amount"></span></div>
+    <dl id="manual-receipt-details" class="manual-receipt-details"></dl>
+    <section class="manual-receipt-goods">
+      <h3>Goods covered</h3><p id="manual-receipt-goods"></p>
+      <div id="manual-receipt-arrival" hidden><h3>Estimated arrival (ETA)</h3><p id="manual-receipt-eta"></p></div>
+    </section>
+    <section id="manual-receipt-notes-section" class="manual-receipt-goods" hidden>
+      <h3>Notes</h3><p id="manual-receipt-notes"></p>
+    </section>
+  </article>
+</section>
 <section id="detail" class="panel" hidden><button id="close-detail" class="secondary">Close order details</button><div id="detail-content"></div></section></section></main>
-<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=commercial-20261120"></script><script defer src="admin.js?v=preserve-session-20261120"></script></body></html>
+<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=commercial-20261120"></script><script defer src="admin-receipts.js?v=manual-receipts-20261123"></script><script defer src="admin.js?v=manual-receipts-20261123"></script></body></html>
