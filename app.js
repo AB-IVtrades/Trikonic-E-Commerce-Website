@@ -124,8 +124,10 @@
   const $ = s => document.querySelector(s);
   const grid = $("#product-grid");
   const cartPage = $("#cart-page");
-  const homeMore = $("#home-more-products");
-  const collection = new URLSearchParams(location.search).get("collection");
+  const homePreorders = $("#home-preorder-grid");
+  const collectionControl = $("#collection-filter");
+  const isCatalogRefresh = Boolean(homePreorders || collectionControl);
+  let collection = new URLSearchParams(location.search).get("collection") || "";
   const collectionLabel = { "in-stock": "In stock", preorder: "Pre-orders", sale: "Flash sale" };
   function parseCartKey(key) {
     try { const parsed = JSON.parse(key); if (Array.isArray(parsed) && (parsed.length === 3 || parsed.length === 4)) return { id: String(parsed[0]), color: String(parsed[1] || ""), size: String(parsed[2] || ""), variant: String(parsed[3] || "") }; } catch (_) {}
@@ -384,9 +386,9 @@
     return { items: items.slice((current - 1) * size, current * size), current, pages, start: (current - 1) * size };
   }
   function writeCatalogUrl(push = false) {
-    if (!grid || homeMore) return;
+    if (!grid || homePreorders) return;
     const url = new URL(location.href);
-    const values = { page: productPage > 1 ? productPage : "", category: category === "All finds" ? "" : category, search: searchTerm.trim(), sort: productSort === "recommended" ? "" : productSort, maxPrice: Number.isFinite(maxPriceFilter) ? maxPriceFilter : "" };
+    const values = { page: productPage > 1 ? productPage : "", category: category === "All finds" ? "" : category, search: searchTerm.trim(), sort: productSort === "recommended" ? "" : productSort, maxPrice: Number.isFinite(maxPriceFilter) ? maxPriceFilter : "", collection };
     Object.entries(values).forEach(([key, value]) => value ? url.searchParams.set(key, String(value)) : url.searchParams.delete(key));
     history[push ? "pushState" : "replaceState"](null, "", url.pathname + url.search + url.hash);
   }
@@ -401,36 +403,52 @@
   }
   function renderProducts() {
     if (!grid) return;
-    if (homeMore) homeMore.hidden = true;
-    if ($("#product-pagination")) $("#product-pagination").hidden = true;
-    if (catalogState === "loading") { grid.innerHTML = '<p class="catalog-message">Loading the latest finds…</p>'; return; }
-    if (catalogState === "error") { grid.innerHTML = '<p class="catalog-message">We couldn’t load the catalog right now. Please refresh in a moment.</p>'; return; }
-    if (catalogState === "empty") { grid.innerHTML = '<p class="catalog-message">No products are published right now. Please check back soon.</p>'; return; }
-    const filters = JSON.stringify([category, searchTerm, productSort, maxPriceFilter, collection]);
-    if (lastProductFilters && lastProductFilters !== filters) { productPage = 1; writeCatalogUrl(); }
-    lastProductFilters = filters;
+    const pagination = $("#product-pagination");
+    const resultCount = $("#product-result-count");
+    if (pagination) pagination.hidden = true;
+    if (!homePreorders) {
+      const filters = JSON.stringify([category, searchTerm, productSort, maxPriceFilter, collection]);
+      if (lastProductFilters && lastProductFilters !== filters) {
+        productPage = 1;
+        writeCatalogUrl();
+      }
+      lastProductFilters = filters;
+    }
+    if (catalogState !== "ready") {
+      const message = {
+        loading: "Loading the latest products…",
+        error: "We couldn’t load the catalog. Refresh the page to try again.",
+        empty: "No products are published right now."
+      }[catalogState];
+      const status = `<p class="catalog-message">${message}</p>`;
+      grid.innerHTML = status;
+      if (homePreorders) homePreorders.innerHTML = status;
+      if (resultCount) resultCount.textContent = catalogState === "loading" ? "Loading products…" : catalogState === "error" ? "Catalog unavailable" : "0 products";
+      return;
+    }
+    if (homePreorders) {
+      const preview = (availability, empty) => products.filter(product => product.availability === availability)
+        .slice(0, 4).map(productCardMarkup).join("") || `<p class="catalog-message">${empty}</p>`;
+      grid.innerHTML = preview("in_stock", "No items are currently in stock.");
+      homePreorders.innerHTML = preview("preorder", "No items are currently available to pre-order.");
+      return;
+    }
     const query = searchTerm.trim().toLowerCase();
-    let shown = products.filter(p => (category === "All finds" || p.category === category) && productStartingPrice(p) <= maxPriceFilter && (!query || `${p.name} ${p.category} ${p.description} ${(p.colors || []).join(" ")} ${(p.sizes || []).join(" ")}`.toLowerCase().includes(query)));
+    const startingPrice = product => productStartingPrice(product, !collectionControl);
+    let shown = products.filter(p => (category === "All finds" || p.category === category) && startingPrice(p) <= maxPriceFilter && (!query || `${p.name} ${p.category} ${p.description ?? ""} ${(p.colors || []).join(" ")} ${(p.sizes || []).join(" ")} ${(p.types || []).join(" ")}`.toLowerCase().includes(query)));
     if (collection === "in-stock") shown = shown.filter(p => p.availability === "in_stock");
     if (collection === "preorder") shown = shown.filter(p => p.availability === "preorder");
     if (collection === "sale") shown = shown.filter(p => p.flashSale && p.availability !== "out_of_stock");
-    if (productSort === "price-low") shown = shown.sort((a, b) => productStartingPrice(a) - productStartingPrice(b));
-    else if (productSort === "price-high") shown = shown.sort((a, b) => productStartingPrice(b) - productStartingPrice(a));
-    else if (productSort === "name") shown = shown.sort((a, b) => a.name.localeCompare(b.name));
-    const resultCount = $("#product-result-count");
-    const filteredCollection = Object.hasOwn(collectionLabel, collection);
+    if (productSort === "price-low") shown.sort((a, b) => startingPrice(a) - startingPrice(b));
+    else if (productSort === "price-high") shown.sort((a, b) => startingPrice(b) - startingPrice(a));
+    else if (productSort === "name") shown.sort((a, b) => a.name.localeCompare(b.name));
+
     const page = paginatedProducts(shown, productPage);
     productPage = page.current;
-    if (resultCount) resultCount.textContent = shown.length ? `Showing ${page.start + 1}–${page.start + page.items.length} of ${shown.length} finds${filteredCollection ? ` · ${collectionLabel[collection]}` : ""}` : "0 finds";
-    const clearCollection = $("#clear-shop-collection");
-    if (clearCollection) clearCollection.hidden = !filteredCollection;
-    if (!shown.length) { grid.innerHTML = `<p class="catalog-message">${query ? "No finds matched your search. Try another word." : "No products match these filters right now."}</p>`; return; }
-    grid.innerHTML = (homeMore ? shown.slice(0, 5) : page.items).map(productCardMarkup).join("");
-    if (!homeMore) renderPagination(page);
-    if (homeMore && shown.length > 5) {
-      $("#home-more-grid").innerHTML = shown.slice(5, 10).map(productCardMarkup).join("");
-      homeMore.hidden = false;
-    }
+    if (resultCount) resultCount.textContent = shown.length ? `Showing ${page.start + 1}–${page.start + page.items.length} of ${shown.length} products` : "0 products";
+    grid.innerHTML = page.items.map(productCardMarkup).join("") ||
+      '<p class="catalog-message">No products match. Try a different search or reset your filters.</p>';
+    renderPagination(page);
   }
   function shippingMarkup(product) {
     const shipping = shippingFeeFor(product);
@@ -447,7 +465,7 @@
     const startPrice = productStartingPrice(p, false);
     const regularPrice = priceFor(p).regular;
     const price = p.flashSale && startPrice < regularPrice ? `<span class="sale-prices"><s>${money(regularPrice)}</s><strong>${money(startPrice)}</strong></span>` : `<strong>${money(startPrice)}</strong>`;
-    return `<article class="product-card"><div class="product-photo" style="--product-bg:${/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(p.color || "") ? p.color : "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}">→</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><div class="product-card-price">${price}</div><p>${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div></div></article>`;
+    return `<article class="product-card"><div class="product-photo" style="--product-bg:${/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(p.color || "") ? p.color : "#eee"}"><button class="product-image-open" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}"><img src="${escapeAttr(resolveProductImage(p.image))}" alt="${escapeAttr(p.name)}" loading="lazy"></button><span class="product-tag">${escapeHtml(p.tag || p.category)}</span>${p.flashSale ? '<span class="sale-ribbon">FLASH SALE</span>' : ""}<button class="quick-add ${outOfStock ? "unavailable" : ""}" data-detail="${escapeAttr(p.id)}" aria-label="View details for ${escapeAttr(p.name)}">→</button></div><div class="product-meta"><div><div class="product-overline"><span class="product-category">${escapeHtml(p.category)}</span><span class="availability-badge ${preorder ? "preorder" : outOfStock ? "out-of-stock" : "in-stock"}">${availabilityLabel}</span></div><h3><button class="product-title-open" data-detail="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button></h3><div class="product-card-price">${price}</div>${isCatalogRefresh ? shippingMarkup(p) : ""}<p class="card-description">${escapeHtml(p.description)}</p>${optionsLabel ? `<small class="product-options-hint">Available in ${escapeHtml(optionsLabel)}</small>` : ""}</div></div></article>`;
   }
   function renderCategories() {
     const categoryRow = $("#categories");
@@ -461,40 +479,98 @@
       .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true }));
     if (categoryRow) {
       const cats = ["All finds", ...categories];
-      categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}">${escapeHtml(c)}${c === "All finds" ? ` <span>${catalogProductCount(products)}</span>` : ""}</button>`).join("");
+      categoryRow.innerHTML = cats.map(c => `<button class="category-chip ${c === category ? "active" : ""}" data-category="${escapeAttr(c)}" aria-pressed="${c === category}">${escapeHtml(c)}${c === "All finds" ? ` <span>${catalogProductCount(products)}</span>` : ""}</button>`).join("");
     }
     if (homeCategoryGrid) {
-      homeCategoryGrid.innerHTML = categories.slice(0, 8).map(name => {
+      const stockCategories = [...new Set(products.filter(product => product.availability === "in_stock").map(product => product.category))];
+      const shortcuts = [...new Set([...stockCategories, ...categories])].filter(Boolean).slice(0, 6);
+      homeCategoryGrid.innerHTML = shortcuts.map(name => {
         const image = resolveProductImage(products.find(p => p.category === name && p.image)?.image);
         return `<a class="home-category-card" href="shop.html?category=${encodeURIComponent(name)}"><span class="home-category-photo" aria-hidden="true">${image ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">` : "↗"}</span><strong>${escapeHtml(name)}</strong></a>`;
       }).join("");
-      const sale = products.find(p => p.flashSale && p.availability !== "out_of_stock");
-      const promo = $("#home-promo-sale");
-      if (promo && sale) {
-        promo.href = "shop.html?collection=sale#shop";
-        if (sale.image) promo.querySelector("img").src = resolveProductImage(sale.image);
-        promo.querySelector("h2").textContent = "Flash sale";
-        promo.querySelector("p").textContent = "See current discounts on selected items.";
-        promo.querySelector("span").textContent = "Shop deals →";
-      }
     }
   }
-  $("#product-search").value = searchTerm;
-  $("#product-search").addEventListener("input", event => { searchTerm = event.currentTarget.value; renderProducts(); });
-  $("#search-form").addEventListener("submit", event => { event.preventDefault(); searchTerm = $("#product-search").value.trim(); if (!["shop.html", "categories.html"].includes(location.pathname.split("/").pop())) { location.href = `shop.html?search=${encodeURIComponent(searchTerm)}`; return; } renderProducts(); $("#shop").scrollIntoView({ behavior: "smooth" }); });
-  if ($("#sort-products")) $("#sort-products").value = productSort;
+  const searchInput = $("#product-search");
+  const sortControl = $("#sort-products");
+  const priceControl = $("#max-price");
+  const filterToggle = $("#shop-filter-toggle");
+  const filtersPanel = $("#shop-filters");
+
+  function syncCatalogControls() {
+    searchInput.value = searchTerm;
+    if (collectionControl) collectionControl.value = Object.hasOwn(collectionLabel, collection) ? collection : "";
+    if (sortControl) sortControl.value = productSort;
+    if (priceControl?.type === "number") priceControl.value = Number.isFinite(maxPriceFilter) ? maxPriceFilter : "";
+    else if (priceControl) {
+      priceControl.value = Number.isFinite(maxPriceFilter) ? maxPriceFilter : priceControl.max;
+      $("#max-price-label").textContent = `Max Price: GH₵${Number(priceControl.value).toLocaleString()}`;
+    }
+  }
+
+  syncCatalogControls();
+  searchInput.addEventListener("input", event => {
+    searchTerm = event.currentTarget.value;
+    if (!homePreorders) renderProducts();
+  });
+  $("#search-form").addEventListener("submit", event => {
+    event.preventDefault();
+    searchTerm = searchInput.value.trim();
+    if (!["shop.html", "categories.html"].includes(location.pathname.split("/").pop())) {
+      location.href = `shop.html?search=${encodeURIComponent(searchTerm)}#shop`;
+      return;
+    }
+    renderProducts();
+    $("#product-result-count")?.focus({ preventScroll: true });
+    $("#shop")?.scrollIntoView({ behavior: "instant" });
+  });
   window.addEventListener("popstate", () => {
     const params = new URLSearchParams(location.search);
     productPage = Math.max(1, Math.floor(Number(params.get("page")) || 1));
-    category = params.get("category") || "All finds"; searchTerm = params.get("search") || "";
-    productSort = params.get("sort") || "recommended"; maxPriceFilter = Number(params.get("maxPrice")) > 0 ? Number(params.get("maxPrice")) : Infinity;
-    lastProductFilters = ""; $("#product-search").value = searchTerm;
-    if ($("#sort-products")) $("#sort-products").value = productSort;
-    renderCategories(); renderProducts();
+    category = params.get("category") || "All finds";
+    searchTerm = params.get("search") || "";
+    collection = params.get("collection") || "";
+    productSort = params.get("sort") || "recommended";
+    maxPriceFilter = Number(params.get("maxPrice")) > 0 ? Number(params.get("maxPrice")) : Infinity;
+    lastProductFilters = "";
+    syncCatalogControls();
+    renderCategories();
+    renderProducts();
   });
-  if (Number.isFinite(maxPriceFilter) && $("#max-price")) { $("#max-price").value = maxPriceFilter; $("#max-price-label").textContent = `Max Price: GH₵${maxPriceFilter.toLocaleString()}`; }
-  $("#sort-products")?.addEventListener("change", event => { productSort = event.currentTarget.value; renderProducts(); });
-  $("#max-price")?.addEventListener("input", event => { maxPriceFilter = Number(event.currentTarget.value); const label = $("#max-price-label"); if (label) label.textContent = `Max Price: GH₵${maxPriceFilter.toLocaleString()}`; renderProducts(); });
+  collectionControl?.addEventListener("change", event => { collection = event.currentTarget.value; renderProducts(); });
+  sortControl?.addEventListener("change", event => { productSort = event.currentTarget.value; renderProducts(); });
+  priceControl?.addEventListener("input", event => {
+    const limit = Number(event.currentTarget.value);
+    maxPriceFilter = limit > 0 ? limit : Infinity;
+    if (event.currentTarget.type === "range") $("#max-price-label").textContent = `Max Price: GH₵${limit.toLocaleString()}`;
+    renderProducts();
+  });
+  $("#reset-shop-filters")?.addEventListener("click", event => {
+    event.preventDefault();
+    category = "All finds";
+    collection = "";
+    searchTerm = "";
+    productSort = "recommended";
+    maxPriceFilter = Infinity;
+    productPage = 1;
+    writeCatalogUrl();
+    syncCatalogControls();
+    renderCategories();
+    renderProducts();
+  });
+  if (filterToggle && filtersPanel) {
+    const setFiltersOpen = open => {
+      filtersPanel.toggleAttribute("data-collapsed", !open);
+      filterToggle.setAttribute("aria-expanded", String(open));
+    };
+    setFiltersOpen(false);
+    filterToggle.hidden = false;
+    filterToggle.addEventListener("click", () => setFiltersOpen(filtersPanel.hasAttribute("data-collapsed")));
+    filtersPanel.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || filterToggle.getClientRects().length === 0) return;
+      setFiltersOpen(false);
+      filterToggle.focus();
+    });
+  }
   async function loadProductsFromSheet() {
     const finishCatalogLoad = () => { renderCategories(); renderProducts(); renderCart(); };
     try {
@@ -925,7 +1001,10 @@
       category = filter.dataset.category;
       renderCategories();
       renderProducts();
-      $("#shop")?.scrollIntoView({ behavior: "instant", block: "start" });
+      if (collectionControl) {
+        [...document.querySelectorAll("#categories [data-category]")]
+          .find(button => button.dataset.category === category)?.focus({ preventScroll: true });
+      } else $("#shop")?.scrollIntoView({ behavior: "instant", block: "start" });
     }
     const qty = e.target.closest("[data-qty]"); if (qty) { const product = productForCartKey(qty.dataset.qty); if (Number(qty.dataset.delta) > 0 && product?.availability === "out_of_stock") return; cart.set(qty.dataset.qty, Math.max(0, (cart.get(qty.dataset.qty) || 0) + Number(qty.dataset.delta))); saveCart(); renderCart(); }
     const remove = e.target.closest("[data-remove]"); if (remove) { cart.delete(remove.dataset.remove); saveCart(); renderCart(); }
@@ -1861,42 +1940,6 @@
   });
   syncRequiredFields();
   renderCategories(); renderProducts(); renderCart();
-  const heroControls = $(".hero-controls");
-  if (heroControls) {
-    const slides = [...document.querySelectorAll(".hero-slide")];
-    const dots = [...heroControls.querySelectorAll(".hero-dot")];
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let active = 0;
-    let requested = 0;
-    let timer;
-
-    function scheduleSlide() {
-      clearTimeout(timer);
-      if (!reducedMotion.matches && !document.hidden) {
-        timer = setTimeout(() => showSlide((requested + 1) % slides.length), 3000);
-      }
-    }
-
-    async function showSlide(index) {
-      requested = index;
-      scheduleSlide();
-      const slide = slides[index];
-      if (!slide.hasAttribute("src")) slide.src = slide.dataset.src;
-      try { await slide.decode(); } catch { return; }
-      if (requested !== index) return;
-      slides[active].classList.remove("active");
-      dots[active].setAttribute("aria-pressed", "false");
-      slide.classList.add("active");
-      dots[index].setAttribute("aria-pressed", "true");
-      active = index;
-    }
-
-    dots.forEach((dot, index) => dot.addEventListener("click", () => showSlide(index)));
-    reducedMotion.addEventListener("change", scheduleSlide);
-    document.addEventListener("visibilitychange", scheduleSlide);
-    heroControls.hidden = false;
-    scheduleSlide();
-  }
   // Informational pages keep the shared app shell for account/cart controls, but
   // don't need a catalog request. Avoid an Apps Script round trip on those pages.
   if (cartPage || (grid && !grid.closest(".runtime-catalog"))) loadProductsFromSheet();

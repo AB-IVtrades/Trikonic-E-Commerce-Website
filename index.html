@@ -15,10 +15,11 @@
   <link rel="stylesheet" href="styles.css?v=device-sessions-20261116&amp;gallery=photo-load1">
   <link rel="stylesheet" href="availability.css">
   <script type="module" src="analytics.js"></script>
+  <link rel="stylesheet" href="storefront.css?v=20261123">
 </head>
-<body>
+<body class="catalog-refresh catalog-home">
   <section class="maintenance-screen" id="maintenance-screen" hidden aria-live="polite"><div class="maintenance-card"><a class="brand" href="/" aria-label="Trikonic Imports"><img class="brand-mark" src="images/trikonic-logo-clear.svg" alt=""><span>trikonic<span class="brand-light"> imports</span></span></a><span class="eyebrow">A LITTLE PAUSE</span><h1>The shop is <em>temporarily closed.</em></h1><p>We’re updating the collection right now. Please check back soon.</p><button class="text-link" id="maintenance-admin-open" type="button">Store admin sign in ↗</button></div></section>
-  <div class="announcement">A little something from everywhere <span>✳</span> Orders are confirmed personally</div>
+  <div class="announcement"><a href="ordering.html">In-stock delivery in 2–5 business days <span aria-hidden="true">↗</span></a></div>
   <header class="site-header">
     <button class="mobile-menu-toggle" id="mobile-menu-open" type="button" aria-label="Open navigation" aria-controls="mobile-sidebar" aria-expanded="false"><span></span><span></span><span></span></button>
     <a class="brand" href="/" aria-label="Trikonic Imports home"><img class="brand-mark" src="images/trikonic-logo-clear.svg" alt=""><span>trikonic<span class="brand-light"> imports</span></span></a>
@@ -29,69 +30,44 @@
   <div class="mobile-nav-backdrop" id="mobile-nav-backdrop" hidden></div><aside class="mobile-sidebar" id="mobile-sidebar" aria-label="Mobile navigation" aria-hidden="true"><div class="mobile-sidebar-head"><span class="eyebrow">TRIKONIC IMPORTS</span><button id="mobile-menu-close" type="button" aria-label="Close navigation">×</button></div><nav aria-label="Pages"><a href="index.html">Home <span>↗</span></a><a href="shop.html">Shop <span>↗</span></a><a href="categories.html">Categories <span>↗</span></a><a href="ordering.html">Ordering <span>↗</span></a><a href="about.html">About <span>↗</span></a><a href="contact.html">Contact <span>↗</span></a></nav><button class="mobile-account-link" id="mobile-account-open" type="button">My account <span>↗</span></button><p>Questions? <a href="https://wa.me/233539026251">Chat with our team</a></p></aside>
 
   <main class="home-page" id="home">
-    <section class="hero shop-hero" aria-labelledby="home-hero-title">
-      <div class="hero-slides" aria-hidden="true">
-        <img class="hero-slide active" src="images/tv-console-bright-mountain.jpg" alt="" fetchpriority="high">
-        <img class="hero-slide" data-src="images/executive-office-desk-wide.jpg" alt="">
-        <img class="hero-slide" data-src="images/round-marble-dining-set.jpg" alt="">
-        <img class="hero-slide" data-src="images/orange-lounge-chair.jpg" alt="">
-      </div>
-      <div class="hero-content">
-        <h1 id="home-hero-title">Good finds for<br><em>everyday living.</em></h1>
-        <p>Furniture, home essentials and personal favorites, sourced from Asia and Europe.</p>
-        <div class="hero-actions">
-          <a class="button hero-shop-button" href="shop.html">Shop the collection <span aria-hidden="true">↗</span></a>
-          <a class="button hero-story-button" href="about.html">Our story</a>
-        </div>
-        <div class="hero-controls" role="group" aria-label="Background carousel" hidden>
-          <button class="hero-dot" type="button" aria-label="Show living room" aria-pressed="true"></button>
-          <button class="hero-dot" type="button" aria-label="Show office" aria-pressed="false"></button>
-          <button class="hero-dot" type="button" aria-label="Show dining room" aria-pressed="false"></button>
-          <button class="hero-dot" type="button" aria-label="Show lounge chair" aria-pressed="false"></button>
+    <section class="catalog-hero" aria-labelledby="home-hero-title">
+      <div class="catalog-hero-copy">
+        <p class="catalog-eyebrow">Home, fashion &amp; tech</p>
+        <h1 id="home-hero-title">Good finds for<br>everyday living<span>.</span></h1>
+        <p class="catalog-hero-description">Find furniture, home essentials and personal favourites, sourced from Asia and Europe.</p>
+        <div class="catalog-hero-actions">
+          <a class="button catalog-primary" href="shop.html?collection=in-stock#shop">Shop in stock <span aria-hidden="true">↗</span></a>
+          <a class="button catalog-secondary" href="shop.html?collection=preorder#shop">Browse pre-orders</a>
         </div>
       </div>
+      <img class="catalog-hero-image" src="images/orange-lounge-chair.jpg" width="1080" height="958" alt="Orange lounge chair beside a round table in a sunlit room" fetchpriority="high">
     </section>
-    <div class="home-discovery">
-      <section class="home-categories" aria-labelledby="home-categories-title">
-        <div class="home-section-heading">
+    <div class="catalog-home-content">
+      <section class="catalog-section" aria-labelledby="home-categories-title">
+        <div class="catalog-section-heading">
           <h2 id="home-categories-title">Shop by category</h2>
-          <a class="home-section-link" href="categories.html">View all categories <span aria-hidden="true">→</span></a>
+          <a class="catalog-text-link" href="categories.html">All categories <span aria-hidden="true">↗</span></a>
         </div>
-        <div class="home-category-grid" id="home-category-grid"></div>
+        <div class="catalog-categories" id="home-category-grid"></div>
       </section>
-      <nav class="home-promos" aria-label="Shop collections">
-        <a class="home-promo home-promo-stock" href="shop.html?collection=in-stock#shop">
-          <img src="images/air-fryer.jpg" alt="" loading="lazy">
-          <div><h2>In stock</h2><p>Browse products available to order now.</p><span>Shop in stock →</span></div>
-        </a>
-        <a class="home-promo home-promo-preorder" href="shop.html?collection=preorder#shop">
-          <img src="images/executive-desk-walnut.jpg" alt="" loading="lazy">
-          <div><h2>Pre-order finds</h2><p>Explore items available to reserve.</p><span>Shop pre-orders →</span></div>
-        </a>
-        <a class="home-promo home-promo-all" id="home-promo-sale" href="shop.html">
-          <img src="images/neutral-eva-slides.jpg" alt="" loading="lazy">
-          <div><h2>All finds</h2><p>Explore the full Trikonic catalog.</p><span>Browse the shop →</span></div>
-        </a>
-      </nav>
-      <section class="home-products" id="shop" aria-labelledby="home-featured-title">
-        <div class="home-section-heading">
-          <h2 id="home-featured-title">Featured finds</h2>
-          <a class="home-section-link" href="shop.html">View all products <span aria-hidden="true">→</span></a>
+      <section class="catalog-section" id="shop" aria-labelledby="home-featured-title">
+        <div class="catalog-section-heading">
+          <div><h2 id="home-featured-title">In stock</h2><p>2–5 business days for processing and delivery</p></div>
+          <a class="catalog-text-link" href="shop.html?collection=in-stock#shop">Shop all in stock <span aria-hidden="true">↗</span></a>
         </div>
         <div class="product-grid" id="product-grid"></div>
       </section>
-      <div class="home-benefits">
-        <a href="ordering.html"><span aria-hidden="true">↗</span><div><strong>Clear shipping details</strong><small>Shown with every item</small></div></a>
-        <a href="ordering.html"><span aria-hidden="true">▣</span><div><strong>Secure checkout</strong><small>Pay online with Paystack</small></div></a>
-        <button id="home-track-order" type="button"><span aria-hidden="true">◎</span><div><strong>Order tracking</strong><small>Follow orders in your account</small></div></button>
-        <a href="https://wa.me/233539026251" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☏</span><div><strong>Customer support</strong><small>Chat with our team</small></div></a>
+      <div class="catalog-assurance" aria-label="Checkout and support">
+        <a href="ordering.html"><strong>Secure checkout</strong><small>Pay by card or mobile money through Paystack</small></a>
+        <button id="home-track-order" type="button"><strong>Track an order</strong><small>Follow progress in your account</small></button>
+        <a href="https://wa.me/233539026251" target="_blank" rel="noopener noreferrer"><strong>Chat on WhatsApp <span aria-hidden="true">↗</span></strong><small>Ask Trikonic about products and delivery</small></a>
       </div>
-      <section class="home-products" id="home-more-products" aria-labelledby="home-more-title" hidden>
-        <div class="home-section-heading">
-          <h2 id="home-more-title">More to explore</h2>
-          <a class="home-section-link" href="shop.html">View the full catalog <span aria-hidden="true">→</span></a>
+      <section class="catalog-section" id="home-preorder-products" aria-labelledby="home-preorders-title">
+        <div class="catalog-section-heading">
+          <div><h2 id="home-preorders-title">Pre-order finds</h2><p>6–9 weeks to arrive in Ghana</p></div>
+          <a class="catalog-text-link" href="shop.html?collection=preorder#shop">Shop all pre-orders <span aria-hidden="true">↗</span></a>
         </div>
-        <div class="product-grid" id="home-more-grid"></div>
+        <div class="product-grid" id="home-preorder-grid"></div>
       </section>
     </div>
     <section class="faq-section" id="faq"><div class="faq-intro"><span class="eyebrow">THE LITTLE DETAILS</span><h2>Good to <em>know.</em></h2><p>Questions before you make it yours? We’ve got you.</p></div><div class="faq-list"><details><summary>How do I place an order?<span>+</span></summary><p>Add your picks to the bag, sign in or create an account, enter your delivery details, and pay securely online. You can track the order from your account.</p></details><details><summary>Can I pay on the website?<span>+</span></summary><p>Yes. Pay securely by card or mobile money through Paystack. Your order is marked paid only after Paystack confirms the transaction. Your order total includes any shipping charge.</p></details><details><summary>Where do you deliver?<span>+</span></summary><p>We will confirm delivery arrangements with you after you place your order.</p></details><details><summary>Are all items always in stock?<span>+</span></summary><p>We source in small batches, so availability can change. We will confirm each item with you personally.</p></details></div></section>
@@ -105,6 +81,6 @@
   <div class="modal-backdrop product-detail-backdrop" id="product-detail-backdrop" aria-hidden="true"><section class="product-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-name"><button class="icon-button detail-close" id="detail-close" aria-label="Close product details">×</button><div class="product-detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detail-main-image" src="" alt=""></div><div class="detail-thumbnails" id="detail-thumbnails"></div></div><div class="detail-information"><span class="eyebrow" id="detail-category"></span><h2 id="detail-name"></h2><div class="detail-availability" id="detail-availability"></div><p class="detail-description" id="detail-description"></p><div class="detail-option-group" id="detail-color-group" hidden><div class="detail-option-heading"><strong>Colour *</strong><span id="detail-color-label"></span></div><div class="detail-swatches" id="detail-colors"></div></div><div class="detail-option-group" id="detail-size-group" hidden><div class="detail-option-heading"><strong>Size</strong><span id="detail-size-label"></span></div><div class="detail-sizes" id="detail-sizes"></div></div><div class="detail-option-group" id="detail-variant-group" hidden><div class="detail-option-heading"><strong>Option</strong><span id="detail-variant-label"></span></div><div class="detail-sizes" id="detail-variants"></div></div><details class="detail-specs" open><summary>Product details <span aria-hidden="true">−</span></summary><div id="detail-specs-table"></div></details></div><aside class="detail-purchase"><span class="eyebrow">A GOOD FIND FOR YOU</span><div class="detail-price" id="detail-price"></div><div id="detail-purchase-status" class="detail-purchase-status"></div><button class="button button-dark detail-add" id="detail-add" type="button">Add to bag <span>↗</span></button><p>Item price and shipping are shown separately. Checkout confirms the final total.</p><div class="detail-purchase-note"><strong>Order with confidence</strong><span>We will contact you to confirm your order and delivery details.</span></div></aside></div></section></div>
   <div class="modal-backdrop variant-backdrop" id="variant-backdrop" aria-hidden="true"><section class="checkout-modal variant-modal" role="dialog" aria-modal="true" aria-labelledby="variant-title"><button class="icon-button modal-close" id="variant-close" aria-label="Close product options">×</button><span class="eyebrow">MAKE IT YOURS</span><h2 id="variant-title">Choose your <em>options.</em></h2><p class="modal-copy" id="variant-product-name"></p><form id="variant-form"><label id="variant-color-field" hidden><span class="field-label">Colour</span><select id="variant-color" name="color"></select></label><label id="variant-size-field" hidden><span class="field-label">Size</span><select id="variant-size" name="size"></select></label><label id="variant-option-field" hidden><span class="field-label">Option</span><select id="variant-option" name="variant"></select></label><p class="form-status" id="variant-status" role="status"></p><button class="button button-dark" type="submit">Add to bag <span>↗</span></button></form></section></div>
   <div class="modal-backdrop" id="account-backdrop" aria-hidden="true"><section class="checkout-modal account-modal account-auth-mode" role="dialog" aria-modal="true" aria-labelledby="account-title"><button class="icon-button modal-close" id="account-close" aria-label="Close account">×</button><div id="account-auth-view"><span class="eyebrow">YOUR TRIKONIC ACCOUNT</span><h2 id="account-title">Welcome to <em>Trikonic.</em></h2><p class="modal-copy" id="account-intro">Create an account to place order requests and keep track of them here.</p><form id="account-form"><p class="required-note">Fields marked * are required.</p><label id="account-name-field" hidden><span class="field-label">Your name</span><input name="fullName" autocomplete="name" placeholder="Your name"></label><label><span class="field-label">Email address</span><input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label id="account-password-field"><span class="field-label">Password</span><input type="password" name="password" autocomplete="current-password" minlength="8" required placeholder="At least 8 characters"></label><button class="button button-dark account-submit" id="account-submit" type="submit">Create account <span>↗</span></button><p class="form-status" id="account-status" role="status"></p></form><div class="account-recovery-actions" id="account-recovery-actions" hidden><button type="button" id="account-forgot-password">Forgot password?</button><button type="button" id="account-resend-confirmation">Resend confirmation email</button></div><p class="account-switch" id="account-switch-copy">Already have an account? <button type="button" id="account-switch">Sign in</button></p></div><div id="account-dashboard" hidden><div class="account-dashboard-layout"><aside class="account-sidebar"><span class="eyebrow">YOUR ACCOUNT</span><h2>Account</h2><p id="account-email" class="account-sidebar-email"></p><div class="account-side-group"><span>MY ACCOUNT</span><button class="account-side-link active" id="account-side-track" type="button" aria-pressed="true"><span aria-hidden="true">▤</span> Track your orders</button></div><div class="account-side-group"><span>MY ITEMS</span><button class="account-side-link" type="button" id="account-side-history" aria-pressed="false"><span aria-hidden="true">♡</span> Order history</button></div><button class="account-side-signout" id="account-signout" type="button">Sign out ↗</button></aside><section class="account-page-main"><nav class="account-breadcrumb" aria-label="Breadcrumb"><a href="#home">Shop</a><span>/</span><strong>Track your orders</strong></nav><span class="eyebrow">YOUR TRIKONIC ACCOUNT</span><h2 id="account-title-signed">Your <em>purchases.</em></h2><p class="modal-copy">Track each order and see its latest status.</p><div class="account-orders-heading"><h3>Order history</h3><button class="text-link" id="orders-refresh" type="button">Refresh</button></div><div id="order-history" class="order-history"><p class="account-empty">Your order requests will appear here.</p></div><p class="form-status" id="orders-status" role="status"></p></section></div></div></section></div>
-  <script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="app.js?v=images-48d8ad2619cc084a"></script>
+  <script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="app.js?v=images-48d8ad2619cc084a&amp;storefront=20261123"></script>
 </body>
 </html>
