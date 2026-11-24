@@ -141,11 +141,13 @@
     </fieldset>
 
     <fieldset>
-      <legend>Shipping and remarks</legend>
+      <legend>Shipping, discount and remarks</legend>
       <div class="invoice-fields">
         <label><span id="invoice-delivery-label">Shipping cost (GHS)</span><input name="delivery" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" value="0"></label>
+        <label><span id="invoice-discount-label">Discount amount (GHS)</span><input name="discount" type="number" min="0" step="0.01" inputmode="decimal" aria-describedby="invoice-discount-error" placeholder="Optional"></label>
         <label>Remarks or payment instructions<textarea name="notes" maxlength="1000" rows="3"></textarea></label>
       </div>
+      <p id="invoice-discount-error" class="error" role="status" hidden>Discount cannot exceed the item subtotal.</p>
     </fieldset>
     <fieldset>
       <legend>Sign-off</legend>
@@ -158,6 +160,7 @@
     <div class="invoice-actions invoice-footer">
       <div class="invoice-totals">
         <span>Subtotal <output id="invoice-subtotal">GH₵0.00</output></span>
+        <span id="invoice-discount-row" hidden>Discount <output id="invoice-discount"></output></span>
         <strong>Total due <output id="invoice-total" aria-live="polite">GH₵0.00</output></strong>
       </div>
       <button type="button" id="invoice-new" class="secondary">New invoice</button>
@@ -201,6 +204,7 @@
     </table>
     <dl class="invoice-print-totals">
       <div><dt>Subtotal</dt><dd id="invoice-print-subtotal"></dd></div>
+      <div id="invoice-print-discount-row" hidden><dt>Discount</dt><dd id="invoice-print-discount"></dd></div>
       <div id="invoice-print-delivery-row"><dt>Shipping cost</dt><dd id="invoice-print-delivery"></dd></div>
       <div><dt>Total due</dt><dd id="invoice-print-total"></dd></div>
     </dl>
@@ -230,6 +234,7 @@
       <div class="receipt-fields">
         <label>Amount received<input name="amount" type="number" min="0.01" max="100000000" step="0.01" inputmode="decimal" required></label>
         <label>Currency<select name="currency"><option value="GHS">GHS · Ghana cedis</option><option value="USD">USD · US dollars</option></select></label>
+        <label>Discount given <small>Optional, in the receipt currency</small><input name="discount" type="number" min="0" step="0.01" inputmode="decimal"></label>
         <label>Payment method<select name="method" required><option value="">Choose a method</option><option>Mobile money</option><option>Bank transfer</option><option>Cash</option><option>Card in person</option><option>Other</option></select></label>
         <label>Transaction reference <small>Optional</small><input name="paymentReference" maxlength="100"></label>
         <label>Received by <small>Optional</small><input name="receivedBy" maxlength="120"></label>
@@ -268,4 +273,4 @@
   </article>
 </section>
 <section id="detail" class="panel" hidden><button id="close-detail" class="secondary">Close order details</button><div id="detail-content"></div></section></section></main>
-<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=commercial-20261120"></script><script defer src="admin-receipts.js?v=manual-receipts-20261123"></script><script defer src="admin.js?v=manual-receipts-20261123"></script></body></html>
+<script defer src="config.js?v=json-catalog-20261116"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script><script defer src="admin-products.js?v=20261120"></script><script defer src="admin-invoices.js?v=discount-20261124"></script><script defer src="admin-receipts.js?v=discount-20261124"></script><script defer src="admin.js?v=manual-receipts-20261123"></script></body></html>

@@ -32,14 +32,17 @@
         return;
       }
       status.hidden = true;
-      const paymentAmount = new Intl.NumberFormat("en-GH", {
+      const money = new Intl.NumberFormat("en-GH", {
         style: "currency", currency: value("currency"), currencyDisplay: "code"
-      }).format(field("amount").valueAsNumber);
+      });
+      const paymentAmount = money.format(field("amount").valueAsNumber);
+      const discount = field("discount").valueAsNumber;
       const entries = [
         ["Receipt number", value("number")],
         ["Date received", printDate.format(new Date(value("paidOn") + "T00:00:00Z"))],
         ["Received from", value("customer")],
         ["Customer contact", value("contact")],
+        ["Discount given", discount > 0 ? money.format(discount) : ""],
         ["Payment method", value("method")],
         ["Transaction reference", value("paymentReference")],
         ["Order or pro forma invoice number", value("orderReference")],

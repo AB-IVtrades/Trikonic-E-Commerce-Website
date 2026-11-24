@@ -86,15 +86,24 @@
       const deliveryField = field('delivery');
       byId('invoice-delivery-label').textContent = `Shipping cost (${currency})`;
       const delivery = deliveryField.value && deliveryField.validity.valid ? Math.round(deliveryField.valueAsNumber * 100) : 0;
+      const discountField = field('discount');
+      byId('invoice-discount-label').textContent = `Discount amount (${currency})`;
+      const discount = discountField.value && discountField.validity.valid ? Math.round(discountField.valueAsNumber * 100) : 0;
+      const exceedsSubtotal = discount > subtotal;
+      const total = discountField.validity.valid && !exceedsSubtotal ? subtotal + delivery - discount : null;
+      byId('invoice-discount-error').hidden = !exceedsSubtotal;
+      byId('invoice-discount-row').hidden = discount === 0;
+      byId('invoice-discount').value = '−' + formatMoney(discount);
       byId('invoice-subtotal').value = formatMoney(subtotal);
-      byId('invoice-total').value = formatMoney(subtotal + delivery);
-      return { items, subtotal, delivery };
+      byId('invoice-total').value = total == null ? '—' : formatMoney(total);
+      return { items, subtotal, delivery, discount, total };
     }
 
     function resetDraft() {
       form.reset();
       currency = currencyField.value;
       originalAmounts.delete(field('delivery'));
+      originalAmounts.delete(field('discount'));
       lines.replaceChildren();
       const date = localDate.format(new Date());
       field('date').value = date;
@@ -102,7 +111,7 @@
       addLine();
       updateTotals();
       for (const id of ['seller', 'sellerAddress', 'seller-contact', 'buyer', 'terms', 'bank', 'lines',
-        'subtotal', 'delivery', 'total', 'notes', 'buyerSigner', 'sellerSigner', 'stamp']) {
+        'subtotal', 'delivery', 'discount', 'total', 'notes', 'buyerSigner', 'sellerSigner', 'stamp']) {
         byId('invoice-print-' + id).replaceChildren();
       }
     }
@@ -198,7 +207,7 @@
     function switchCurrency() {
       const next = currencyField.value;
       if (next === currency) return;
-      const inputs = [field('delivery'), ...lines.querySelectorAll('[data-invoice-price]')];
+      const inputs = [field('delivery'), field('discount'), ...lines.querySelectorAll('[data-invoice-price]')];
       const updates = [];
       for (const input of inputs) {
         let message;
@@ -210,7 +219,7 @@
             message = 'Load the exchange rate with Refresh before converting this invoice.';
           } else {
             const amount = convertMinor(original.amount, original.currency, next);
-            if (amount > Number(input.max) * 100) message = 'The converted amount exceeds the invoice price limit.';
+            if (input.max && amount > Number(input.max) * 100) message = 'The converted amount exceeds the invoice price limit.';
             else updates.push({ input, original, amount });
           }
         }
@@ -261,7 +270,11 @@
     async function printInvoice(event) {
       event.preventDefault();
       if (byId('workspace').hidden || byId('invoices').hidden) return;
-      const { items, subtotal, delivery } = updateTotals();
+      const { items, subtotal, delivery, discount, total } = updateTotals();
+      if (total == null) {
+        field('discount').focus();
+        return;
+      }
       const version = printVersion;
       for (const name of ['seller', 'customer', 'number']) {
         if (!value(name)) return showError('Enter the seller, buyer, and invoice number.', field(name));
@@ -330,11 +343,13 @@
         sellerSigner: value('sellerSigner'),
         subtotal: formatMoney(subtotal),
         delivery: formatMoney(delivery),
-        total: formatMoney(subtotal + delivery)
+        discount: '−' + formatMoney(discount),
+        total: formatMoney(total)
       };
       for (const [key, value] of Object.entries(values)) byId('invoice-print-' + key).textContent = value;
       byId('invoice-print-lines').replaceChildren(rows);
       byId('invoice-print-delivery-row').hidden = delivery === 0;
+      byId('invoice-print-discount-row').hidden = discount === 0;
       byId('invoice-print-remarks').hidden = !values.notes;
       if (pendingImages.length) {
         printStatus.textContent = 'Preparing invoice images…';
