@@ -115,7 +115,12 @@
   let category = new URLSearchParams(location.search).get("category") || "All finds";
   let searchTerm = new URLSearchParams(location.search).get("search") || "";
   let maxPriceFilter = Number.POSITIVE_INFINITY;
-  let productSort = new URLSearchParams(location.search).get("sort") || "recommended";
+  const DEFAULT_PRODUCT_SORT = "newest";
+  function catalogSortFromParams(params) {
+    const sort = params.get("sort");
+    return ["price-low", "price-high", "name"].includes(sort) ? sort : DEFAULT_PRODUCT_SORT;
+  }
+  let productSort = catalogSortFromParams(new URLSearchParams(location.search));
   const PRODUCTS_PER_PAGE = 24;
   let productPage = Math.max(1, Math.floor(Number(new URLSearchParams(location.search).get("page")) || 1));
   let lastProductFilters = "";
@@ -388,7 +393,7 @@
   function writeCatalogUrl(push = false) {
     if (!grid || homePreorders) return;
     const url = new URL(location.href);
-    const values = { page: productPage > 1 ? productPage : "", category: category === "All finds" ? "" : category, search: searchTerm.trim(), sort: productSort === "recommended" ? "" : productSort, maxPrice: Number.isFinite(maxPriceFilter) ? maxPriceFilter : "", collection };
+    const values = { page: productPage > 1 ? productPage : "", category: category === "All finds" ? "" : category, search: searchTerm.trim(), sort: productSort === DEFAULT_PRODUCT_SORT ? "" : productSort, maxPrice: Number.isFinite(maxPriceFilter) ? maxPriceFilter : "", collection };
     Object.entries(values).forEach(([key, value]) => value ? url.searchParams.set(key, String(value)) : url.searchParams.delete(key));
     history[push ? "pushState" : "replaceState"](null, "", url.pathname + url.search + url.hash);
   }
@@ -442,6 +447,10 @@
     if (productSort === "price-low") shown.sort((a, b) => startingPrice(a) - startingPrice(b));
     else if (productSort === "price-high") shown.sort((a, b) => startingPrice(b) - startingPrice(a));
     else if (productSort === "name") shown.sort((a, b) => a.name.localeCompare(b.name));
+    else if (productSort === DEFAULT_PRODUCT_SORT && sortControl) {
+      // The catalog sends products in insertion order, oldest first.
+      shown.reverse();
+    }
 
     const page = paginatedProducts(shown, productPage);
     productPage = page.current;
@@ -529,7 +538,7 @@
     category = params.get("category") || "All finds";
     searchTerm = params.get("search") || "";
     collection = params.get("collection") || "";
-    productSort = params.get("sort") || "recommended";
+    productSort = catalogSortFromParams(params);
     maxPriceFilter = Number(params.get("maxPrice")) > 0 ? Number(params.get("maxPrice")) : Infinity;
     lastProductFilters = "";
     syncCatalogControls();
@@ -549,7 +558,7 @@
     category = "All finds";
     collection = "";
     searchTerm = "";
-    productSort = "recommended";
+    productSort = DEFAULT_PRODUCT_SORT;
     maxPriceFilter = Infinity;
     productPage = 1;
     writeCatalogUrl();
